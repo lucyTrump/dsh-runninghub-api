@@ -50,6 +50,8 @@ node scripts/link-local-dsh.mjs [/path/to/deepseek-harness]
 pnpm build
 ```
 
+注意：用 `dsh plugin add <本目录>` 做 link 调试时，node_modules 里的 `@deepseek-ai/*` 必须是指向本地 DSH checkout 的软链（真实 npm 副本会造成 cordis 双实例）。所以每次 `pnpm install` 之后、重启 dsh 之前，重跑一次 `node scripts/link-local-dsh.mjs`。
+
 装进本机 web profile 调试（link 安装，重新构建后重启生效）：
 
 ```sh

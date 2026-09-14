@@ -76,7 +76,9 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-agent-default-model": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-api-remotes": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-attachment": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-client-locale": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-client-store": "^0.1.5-rc.2",
@@ -88,7 +90,6 @@
     "@deepseek-ai/dsh-client-ui-tool": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-credentials": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-home-paths": "^0.1.5-rc.2",
-    "@deepseek-ai/dsh-agent-default-model": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-jobs": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.5-rc.2",

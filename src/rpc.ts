@@ -9,6 +9,7 @@ import { RunningHubGateway } from './gateway.ts'
 import { enrichNodeDefaults, type ObjectInfoCache } from './nodeinfo.ts'
 import { buildWorkflowGraph, validateWorkflowDefinition } from './payload.ts'
 import type { RunningHubConfig } from './settings.ts'
+import { parseDescribeAnswer } from './describe.ts'
 import { parseWorkflowPrompt } from './workflow.ts'
 import type { WorkflowNodeInfo } from './workflow.ts'
 import type {
@@ -167,44 +168,52 @@ export class RunningHubController extends TypertRemoteService {
     }
     const zh = request.locale?.startsWith('zh') === true
     try {
-      const assembler = new BlockAssembler()
-      for await (const chunk of llm.stream({
-        provider,
-        model,
-        messages: [createUserMessage({
-          content: [{ type: 'text', text: workflowDigest(request.workflow) }],
-          source: { kind: 'plugin', plugin: 'dsh-runninghub-api' },
-        })],
-        system: zh ? DESCRIBE_SYSTEM_ZH : DESCRIBE_SYSTEM_EN,
-        maxTokens: 300,
-      })) assembler.push(chunk)
-      const blocks = assembler.blocks()
-      const text = blocks
-        .filter((block): block is Extract<(typeof blocks)[number], { type: 'text' }> => block.type === 'text')
-        .map(block => block.text)
-        .join('\n')
-      // Contract: line one starts with 描述:/description:, line two with
-      // 关注:/attention:. Strip the attention line out of the description
-      // before flattening, and validate proposed keys against the workflow so
-      // a hallucinated nodeId.fieldName can never mark a param.
-      const attentionMatch = /(?:^|\n)[^\n]*(?:关注|attention)\s*[:：]\s*([^\n]*)/i.exec(text)
-      const description = normalizeDescription(
-        text
-          .replace(/(?:^|\n)[^\n]*(?:关注|attention)\s*[:：][^\n]*/gi, '')
-          .replace(/^\s*(?:描述|description)\s*[:：]\s*/i, ''),
-        zh,
-      )
-      const valid = new Set(request.workflow.nodeDefaults.map(param => `${param.nodeId}.${param.fieldName}`))
-      const attention = attentionMatch?.[1] === undefined ? [] : attentionMatch[1]
-        .split(/[,，、;；]/)
-        .map(key => key.trim())
-        .filter(key => valid.has(key))
-        .slice(0, 5)
-      return {
-        description,
-        ...(attention.length > 0 ? { attention } : {}),
+      // One transport-level retry: proxied reasoning streams (Responses API
+      // gateways) sometimes drop mid-thinking, and a fresh attempt is cheap.
+      let lastEmpty = ''
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const assembler = new BlockAssembler()
+        // A hung provider must not pin the remote call forever.
+        for await (const chunk of llm.stream({
+          provider,
+          model,
+          messages: [createUserMessage({
+            content: [{ type: 'text', text: workflowDigest(request.workflow) }],
+            source: { kind: 'plugin', plugin: 'dsh-runninghub-api' },
+          })],
+          system: zh ? DESCRIBE_SYSTEM_ZH : DESCRIBE_SYSTEM_EN,
+          // No maxTokens (adapters omit the cap and the provider uses the
+          // model's own limit) and no reasoningEffort override — adapters
+          // reject effort values a model does not advertise.
+          signal: AbortSignal.timeout(180_000),
+        })) assembler.push(chunk)
+        const blocks = assembler.blocks()
+        const text = blocks
+          .filter((block): block is Extract<(typeof blocks)[number], { type: 'text' }> => block.type === 'text')
+          .map(block => block.text)
+          .join('\n')
+        const valid = new Set(request.workflow.nodeDefaults.map(param => `${param.nodeId}.${param.fieldName}`))
+        const { description, attention } = parseDescribeAnswer(text, valid, zh)
+        if (description !== '') {
+          return {
+            description,
+            ...(attention.length > 0 ? { attention } : {}),
+          }
+        }
+        const finish = assembler.finish
+        const shape = blocks.map(block => block.type).join(',') || 'none'
+        const cause = finish.kind === 'error' || finish.kind === 'aborted'
+          ? ` ${finish.failure.code}: ${finish.failure.message}`
+          : ''
+        lastEmpty = `model ${provider}/${model} returned no usable text (finish=${finish.kind}${cause}, blocks=${shape}, textChars=${text.length})`
+        // Only transport-failure finishes are worth a retry.
+        if (finish.kind !== 'error' && finish.kind !== 'aborted') break
       }
+      throw new RemoteError('runninghub/describe-failed', lastEmpty, {})
     } catch (error) {
+      // Host-side log: the settings card swallows this failure by design, so
+      // the server log is the only place the cause survives.
+      this.ctx.logger.warn(`runninghub: describeWorkflow failed for ${workflowLogLabel(request)} via ${provider}/${model}: ${this.describe(error)}`)
       if (error instanceof RemoteError) throw error
       throw new RemoteError('runninghub/describe-failed', this.describe(error), {})
     }
@@ -274,18 +283,19 @@ function workflowDigest(workflow: DescribeWorkflowRequest['workflow']): string {
       return `${param.label ?? param.fieldName}(${param.kind})${shown === '' ? '' : `=${shown}`}`
     }).join('; '))
   }
+  if (workflow.mediaNote !== undefined && workflow.mediaNote !== '') {
+    lines.push(`media note: ${workflow.mediaNote}`)
+  }
   if (workflow.mediaSlots.length > 0) {
-    lines.push('media: ' + workflow.mediaSlots.map(slot => `${slot.label}(${slot.type})`).join('; '))
+    lines.push('media: ' + workflow.mediaSlots.map(slot =>
+      `${slot.label}(${slot.type})${slot.attention === true ? ' ★' : ''}`).join('; '))
   }
   const text = lines.join('\n')
   return text.length > 4000 ? text.slice(0, 4000) : text
 }
 
-/** Collapse the model's answer to one flat line within the hard length ceiling. */
-function normalizeDescription(text: string, zh: boolean): string {
-  const limit = zh ? 120 : 240
-  const flat = text.replace(/["'「『"']+$/u, '').replace(/^["'「『"']+/u, '').replace(/\s+/gu, ' ').trim()
-  return flat.length > limit ? flat.slice(0, limit) : flat
+function workflowLogLabel(request: DescribeWorkflowRequest): string {
+  return `${request.workflow.label} (${request.workflow.workflowId})`
 }
 
 const DESCRIBE_SYSTEM_ZH = [

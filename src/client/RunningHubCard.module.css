@@ -247,11 +247,21 @@
 
 .attention {
   composes: iconButton;
+  border: none;
 }
 
 .attentionActive {
   composes: iconButton;
-  color: var(--dsw-alias-brand-primary);
+  border: none;
+  color: #e40b0b;
+  background: #e40b0b79;
+}
+
+.attentionActive:hover {
+  background: var(--dsw-alias-brand-primary);
+  border: none;
+  color: var(--dsw-alias-brand-primary-invert, #fff);
+  opacity: 0.85;
 }
 
 .paramLabel {
@@ -281,11 +291,26 @@
 }
 
 .mediaList {
-  margin: 0;
-  padding: 0 0 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mediaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mediaLabel {
+  flex: 0 0 40%;
+  min-width: 0;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workflowActions {

@@ -147,9 +147,12 @@ Run cloud ComfyUI workflows through the \`runninghub_*\` tools.
   NO supplied media are CUT from the graph (Load node removed, links cleaned,
   downstream ref_* inputs cleared — never placeholder-filled). So "no
   reference image" really means no reference chain.
-- Params marked \`★\` are user-curated attention params: always review them
-  when running. Unmarked params are intentionally fixed — do not analyze or
-  override them unless the user asks. \`*\` still means required.
+- Params and media slots marked \`★\` are user-curated attention items:
+  always review them when running. Unmarked params are intentionally fixed —
+  do not analyze or override them unless the user asks; unmarked media slots
+  are internal wiring. \`*\` still means required. A workflow's
+  \`media note\` line is the user's media usage rule (counts, mapping
+  order) — follow it instead of re-deriving it.
 - \`instanceType: "plus"\` selects the 48G-VRAM pool.
 - \`runninghub_cancel_task\` cancels by local task id.
 - \`runninghub_refresh_workflow\` re-fetches a saved workflow's latest

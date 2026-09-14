@@ -55,6 +55,12 @@ export interface MediaSlot {
   /** true = fill a URL (LoadImageFromUrl); false = upload and fill fileName. */
   viaUrl?: boolean
   required?: boolean
+  /**
+   * User-curated "feed me media" marker, same semantics as param attention:
+   * marked slots are the ones the model must actively supply at run time;
+   * unmarked slots are internal/fixed and not worth re-analyzing.
+   */
+  attention?: boolean
 }
 
 /** A saved RunningHub workflow with its editable params and media slots. */
@@ -68,6 +74,12 @@ export interface WorkflowDefinition {
   fetchedAt?: string
   nodeDefaults: NodeParamOverride[]
   mediaSlots: MediaSlot[]
+  /**
+   * One workflow-level media usage note for the model (e.g. "参考图 0–9
+   * 张，按顺序对应 9 个参考图槽位") — declared once instead of repeated
+   * per slot.
+   */
+  mediaNote?: string
 }
 
 /**

@@ -50,7 +50,7 @@ function describeParam(param: NodeParamOverride): string {
 }
 
 function describeMedia(slot: MediaSlot): string {
-  return `${slot.nodeId}.${slot.fieldName} (${slot.type})${slot.required ? ' *' : ''}`
+  return `${slot.nodeId}.${slot.fieldName} (${slot.type})${slot.required ? ' *' : ''}${slot.attention === true ? ' ★' : ''}`
 }
 
 function inferFileType(name: string): string {
@@ -166,6 +166,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
       const items = workflows.map(workflow => ({
         label: workflow.label,
         ...(workflow.description !== undefined ? { description: workflow.description } : {}),
+        ...(workflow.mediaNote !== undefined ? { mediaNote: workflow.mediaNote } : {}),
         workflowId: workflow.workflowId,
         params: workflow.nodeDefaults.map(describeParam),
         media: workflow.mediaSlots.map(describeMedia),
@@ -173,7 +174,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
       const summary = workflows.length === 0
         ? 'No RunningHub workflows saved yet. Add one in Settings → Plugins → RunningHub.'
         : `${workflows.length} workflow(s):\n` + items.map(item =>
-          `- ${item.label} (${item.workflowId})` + (item.description !== undefined ? ` — ${item.description}` : '') + (item.params.length > 0 ? `\n  params: ${item.params.join(', ')}` : '') + (item.media.length > 0 ? `\n  media: ${item.media.join(', ')}` : '')).join('\n')
+          `- ${item.label} (${item.workflowId})` + (item.description !== undefined ? ` — ${item.description}` : '') + (item.mediaNote !== undefined ? `\n  media note: ${item.mediaNote}` : '') + (item.params.length > 0 ? `\n  params: ${item.params.join(', ')}` : '') + (item.media.length > 0 ? `\n  media: ${item.media.join(', ')}` : '')).join('\n')
       return toJson({ workflows: items, summary })
     },
   }))

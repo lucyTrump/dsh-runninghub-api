@@ -17,7 +17,7 @@
  * Output lands in lib/ and is validated by the generator itself (export map +
  * files list). Run via `pnpm build`; safe to run alone after editing src/rpc.ts.
  */
-import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -46,24 +46,43 @@ const compilerOptions = {
   esModuleInterop: true,
 }
 
-function stagePackage(name, sourceDir) {
+/**
+ * Stage one package under .typert/packages. A workspace checkout contributes
+ * src/; a published npm package ships no sources, so its built type
+ * declarations stand in — the analyzer's identity checks only need the
+ * declarations to live inside a registered package root.
+ * @returns the specifier-entry source path for the aggregate's paths mapping.
+ */
+function stagePackage(name, sourceDir, tsconfigExtra = {}) {
   const dir = join(staging, 'packages', name.split('/').pop())
   mkdirSync(dir, { recursive: true })
-  cpSync(join(sourceDir, 'src'), join(dir, 'src'), { recursive: true })
   cpSync(join(sourceDir, 'package.json'), join(dir, 'package.json'))
-  writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions, include: ['src'] }, null, 2))
-  return dir
+  if (existsSync(join(sourceDir, 'src'))) {
+    cpSync(join(sourceDir, 'src'), join(dir, 'src'), { recursive: true })
+    writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions, include: ['src'], ...tsconfigExtra }, null, 2))
+    return `./packages/${name.split('/').pop()}/src/index.ts`
+  }
+  cpSync(join(sourceDir, 'lib'), join(dir, 'lib'), { recursive: true })
+  // The analyzer maps a manifest's lib/ export back to src/<name>.ts, so give
+  // it one: a facade re-exporting the published declarations.
+  mkdirSync(join(dir, 'src'), { recursive: true })
+  writeFileSync(join(dir, 'src', 'index.ts'), "export * from '../lib/types/index.js'\n")
+  writeFileSync(join(dir, 'tsconfig.json'), JSON.stringify({ compilerOptions, include: ['src', 'lib'] }, null, 2))
+  return `./packages/${name.split('/').pop()}/src/index.ts`
 }
 
 rmSync(staging, { recursive: true, force: true })
 const paths = {}
 const references = [{ path: './packages/dsh-runninghub-api' }]
-stagePackage('dsh-runninghub-api', root)
+// The host face analyzes src/ minus the browser half: src/client imports the
+// not-yet-generated lib/typert.remote-client.js (this script IS its producer),
+// which would otherwise dangle during generation.
+stagePackage('dsh-runninghub-api', root, { exclude: ['src/client'] })
 for (const name of STAGED_DSH_PACKAGES) {
   const sourceDir = dirname(require.resolve(`${name}/package.json`))
-  const dir = stagePackage(name, sourceDir)
+  const entry = stagePackage(name, sourceDir)
   references.push({ path: `./packages/${name.split('/').pop()}` })
-  paths[name] = [`./packages/${name.split('/').pop()}/src/index.ts`]
+  paths[name] = [entry]
 }
 writeFileSync(join(staging, 'tsconfig.host.json'), JSON.stringify({
   compilerOptions: { ...compilerOptions, paths },

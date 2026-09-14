@@ -21,6 +21,7 @@ const PACKAGES = [
   '@deepseek-ai/dsh-agent',
   '@deepseek-ai/dsh-agent-default-model',
   '@deepseek-ai/dsh-api-remotes',
+  '@deepseek-ai/dsh-api-session-controller',
   '@deepseek-ai/dsh-attachment',
   '@deepseek-ai/dsh-client-locale',
   '@deepseek-ai/dsh-client-store',

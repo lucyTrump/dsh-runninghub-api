@@ -50,6 +50,11 @@ node scripts/link-local-dsh.mjs [/path/to/deepseek-harness]
 pnpm build
 ```
 
+Note: when link-installed into a live dsh profile (`dsh plugin add <this dir>`), the
+`@deepseek-ai/*` entries in node_modules must be symlinks into the local DSH
+checkout — real npm copies would duplicate the cordis singleton. Re-run
+`node scripts/link-local-dsh.mjs` after every `pnpm install`, before restarting dsh.
+
 Local install into the web profile (link install; rebuilds are picked up on restart):
 
 ```sh
