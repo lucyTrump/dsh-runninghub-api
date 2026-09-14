@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。设置卡片管理 API Key 与工作流库；7 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。设置卡片管理 API Key 与工作流库；8 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
 
 ## 安装
 
