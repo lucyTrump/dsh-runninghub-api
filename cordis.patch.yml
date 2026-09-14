@@ -1,0 +1,6 @@
+# Bundle layer contributed to any profile that installs this package
+# (dsh plugin --profile web add <dir>). The row is resolved by package name
+# through the profile's node_modules / dsh installation mirror.
+- insert:
+    - id: runninghub
+      name: dsh-runninghub-api
