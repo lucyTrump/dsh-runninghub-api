@@ -62,3 +62,7 @@ dsh plugin --profile web add /path/to/dsh-runninghub-api
 ```
 
 `tests/` covers the gateway against a mocked fetch (endpoints A–F, status codes 0/804/805/813, secret masking, no-key fast-fail), workflow prompt mapping, payload validation/override reconciliation, and the media cache.
+
+## License
+
+[MIT](LICENSE)

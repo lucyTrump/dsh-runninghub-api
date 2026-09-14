@@ -17,6 +17,7 @@ import runninghubRemote from '../../lib/typert.remote-client.js'
 import type { RunningHubCardSlotFace } from './RunningHubCard.tsx'
 import { RunningHubCard } from './RunningHubCard.tsx'
 import { RunWorkflowRow } from './RunWorkflowRow.tsx'
+import { TaskPanel, type TaskPanelInjected } from './TaskPanel.tsx'
 import {
   RUNNINGHUB_NS, RunningHubCardController, type RunningHubSection,
 } from './runninghub-card-controller.ts'
@@ -25,6 +26,14 @@ import { en, zh, type RunningHubLocaleKey } from './locales.ts'
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     'settings.runninghub': RunningHubLocaleKey
+  }
+  interface SlotMap {
+    /**
+     * ui-layout's frame-wide floating layer (list, additive, click-through).
+     * Merged locally so this program need not depend on the layout package
+     * for a seat it does not own; the runtime declaration is ui-layout's.
+     */
+    'shell.overlay': { kind: 'list'; scope: 'root' }
   }
 }
 
@@ -83,6 +92,20 @@ const cardPlugin = {
       },
     }),
   }, RunningHubCard))
+
+  // Floating task panel: a shell.overlay entry (additive list seat over the
+  // whole frame). The taskPanelEnabled setting hides it inside the component.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'runninghub-tasks',
+    locale: NS,
+    inject: (): TaskPanelInjected => ({
+      scope,
+      listTasks: () => ctx.remote.runninghub.listTasks(),
+      cancelTask: localId => ctx.remote.runninghub.cancelTask({ localId }),
+      refreshTasks: () => ctx.remote.runninghub.refreshTasks(),
+    }),
+  }, TaskPanel))
 
   // Chat panel: render the submitted nodeInfoList payload for `runninghub_run_workflow`.
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({

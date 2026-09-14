@@ -17,6 +17,8 @@ import type {
   FetchWorkflowData, FetchWorkflowRequest,
   RunTestData, RunTestRequest,
   ValidateWorkflowData, ValidateWorkflowRequest,
+  CancelTaskData, CancelTaskRequest,
+  ListTasksData,
 } from './types.ts'
 import type { RunningHubTaskRunner } from './runner.ts'
 
@@ -256,6 +258,36 @@ export class RunningHubController extends TypertRemoteService {
       status: record.status,
       nodeInfoList: validation.nodeInfoList,
     }
+  }
+
+  /** Live ledger read for the floating task panel (oldest first). */
+  @Remote
+  async listTasks(): Promise<ListTasksData> {
+    const tasks = this.getRunner().list().map(record => ({
+      localId: record.localId,
+      ...(record.taskId !== undefined ? { taskId: record.taskId } : {}),
+      status: record.status,
+      ...(record.label !== undefined ? { label: record.label } : {}),
+      workflowId: record.workflowId,
+      createdAt: record.createdAt,
+      ...(record.startedAt !== undefined ? { startedAt: record.startedAt } : {}),
+      ...(record.finishedAt !== undefined ? { finishedAt: record.finishedAt } : {}),
+      ...(record.error !== undefined ? { error: record.error } : {}),
+    }))
+    return { tasks }
+  }
+
+  /** Manual re-query of every non-terminal task (the panel's refresh button). */
+  @Remote
+  async refreshTasks(): Promise<ListTasksData> {
+    await this.getRunner().refresh()
+    return this.listTasks()
+  }
+
+  /** Panel cancel: the runner falls back to the submit-time owner for the jobs fence. */
+  @Remote
+  async cancelTask(request: CancelTaskRequest): Promise<CancelTaskData> {
+    return { outcome: this.getRunner().cancel(request.localId) }
   }
 }
 

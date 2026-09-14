@@ -34,7 +34,7 @@ const API_KEY_FIELD = 'apiKey'
 export type RunningHubSection = Pick<
   RunningHubConfig,
   | 'apiKeyEnv' | 'baseUrl' | 'pollIntervalMs' | 'runTimeoutMs' | 'queueTimeoutMs'
-  | 'maxConcurrentTasks' | 'uploadUseLegacy' | 'describeModel' | 'workflows'
+  | 'maxConcurrentTasks' | 'uploadUseLegacy' | 'taskPanelEnabled' | 'describeModel' | 'workflows'
 >
 
 /** What the credentials domain last reported, and for which reference. */
@@ -73,6 +73,10 @@ export interface RunningHubCardState extends CardShell {
   uploadUseLegacy: boolean
   /** True when saving would leave a user-layer entry for the toggle. */
   uploadUseLegacyOverridden: boolean
+  /** Floating task-panel toggle (draft when it differs from the section). */
+  taskPanelEnabled: boolean
+  /** True when saving would leave a user-layer entry for the toggle. */
+  taskPanelEnabledOverridden: boolean
   /** The workflows the card edits: the draft while staged, else the section value. */
   workflows: WorkflowDefinition[]
   /** True when the workflows draft differs from the section. */
@@ -89,6 +93,10 @@ export interface RunningHubCardFace extends CardActions {
   editUploadUseLegacy: (checked: boolean) => void
   /** Stage a clear of the legacy-upload override. */
   resetUploadUseLegacy: () => void
+  /** Stage the floating task-panel toggle. */
+  editTaskPanelEnabled: (checked: boolean) => void
+  /** Stage a clear of the task-panel override. */
+  resetTaskPanelEnabled: () => void
   /** Stage a whole workflows array (add/remove/update compute it in the component). */
   stageWorkflows: (workflows: WorkflowDefinition[]) => void
 }
@@ -100,6 +108,8 @@ export class RunningHubCardController {
   private credential: CredentialState = { ref: '', configured: false, writable: true }
   private workflowsDraft: WorkflowDefinition[] | undefined
   private uploadDraft: boolean | undefined
+  private panelDraft: boolean | undefined
+  private panelReset = false
 
   /**
    * @param scope - the bound settings scope for the `runninghub` namespace.
@@ -141,10 +151,14 @@ export class RunningHubCardController {
         this.workflowsDraft = undefined
         this.uploadDraft = undefined
         this.uploadReset = false
+        this.panelDraft = undefined
+        this.panelReset = false
         this.republish()
       },
       editUploadUseLegacy: (checked) => { this.uploadDraft = checked; this.uploadReset = false; this.republish() },
       resetUploadUseLegacy: () => { this.uploadDraft = undefined; this.uploadReset = true; this.republish() },
+      editTaskPanelEnabled: (checked) => { this.panelDraft = checked; this.panelReset = false; this.republish() },
+      resetTaskPanelEnabled: () => { this.panelDraft = undefined; this.panelReset = true; this.republish() },
       stageWorkflows: (workflows) => { this.workflowsDraft = workflows; this.republish() },
     }
   }
@@ -157,10 +171,11 @@ export class RunningHubCardController {
     const shell = this.form.shell()
     const workflowsDirty = this.workflowsDraft !== undefined
     const uploadDirty = this.uploadDraft !== undefined || this.uploadReset
+    const panelDirty = this.panelDraft !== undefined || this.panelReset
     const base = snapshot.base as RunningHubSection | undefined
     return {
       ...shell,
-      dirty: shell.dirty || workflowsDirty || uploadDirty,
+      dirty: shell.dirty || workflowsDirty || uploadDirty || panelDirty,
       apiKeyEnv: this.form.field('apiKeyEnv'),
       baseUrl: this.form.field('baseUrl'),
       pollIntervalMs: this.form.field('pollIntervalMs'),
@@ -177,6 +192,12 @@ export class RunningHubCardController {
       uploadUseLegacyOverridden: this.uploadReset
         ? false
         : this.uploadDraft !== undefined || hasOwn(snapshot, 'uploadUseLegacy'),
+      taskPanelEnabled: this.panelReset
+        ? base?.taskPanelEnabled ?? true
+        : this.panelDraft ?? snapshot.value?.taskPanelEnabled ?? true,
+      taskPanelEnabledOverridden: this.panelReset
+        ? false
+        : this.panelDraft !== undefined || hasOwn(snapshot, 'taskPanelEnabled'),
       workflows: this.workflowsDraft ?? snapshot.value?.workflows ?? [],
       workflowsDirty,
     }
@@ -209,6 +230,14 @@ export class RunningHubCardController {
       const value = this.uploadDraft
       await this.scope.set('uploadUseLegacy', value)
       if (this.scope.getSnapshot().value?.uploadUseLegacy === value) this.uploadDraft = undefined
+    }
+    if (this.panelReset) {
+      await this.scope.unset('taskPanelEnabled')
+      if (!hasOwn(this.scope.getSnapshot(), 'taskPanelEnabled')) this.panelReset = false
+    } else if (this.panelDraft !== undefined) {
+      const value = this.panelDraft
+      await this.scope.set('taskPanelEnabled', value)
+      if (this.scope.getSnapshot().value?.taskPanelEnabled === value) this.panelDraft = undefined
     }
     await this.readCredential()
     this.republish()

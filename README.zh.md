@@ -59,3 +59,7 @@ dsh plugin --profile web add /path/to/dsh-runninghub-api
 ```
 
 `tests/` 覆盖：网关对 mocked fetch 的端点 A–F、状态码 0/804/805/813、密钥脱敏、无密钥快速失败；工作流 prompt 映射；负载校验/覆盖合并；媒体缓存。
+
+## 许可证
+
+[MIT](LICENSE)

@@ -98,6 +98,8 @@ export interface RunningHubConfig {
   queueTimeoutMs?: number
   maxConcurrentTasks?: number
   uploadUseLegacy?: boolean
+  /** Floating task-panel overlay in the web UI; off hides it entirely. */
+  taskPanelEnabled?: boolean
   /** 'provider/model' route for LLM workflow-description generation; empty = the agent default model. */
   describeModel?: string
   workflows?: WorkflowDefinition[]
@@ -113,6 +115,7 @@ export const Config: z<RunningHubConfig> = z.object({
   queueTimeoutMs: z.number().step(1).min(0).default(DEFAULT_QUEUE_TIMEOUT_MS),
   maxConcurrentTasks: z.number().step(1).min(1).default(DEFAULT_MAX_CONCURRENT_TASKS),
   uploadUseLegacy: z.boolean().default(false),
+  taskPanelEnabled: z.boolean().default(true),
   describeModel: z.string(),
   workflows: z.any<WorkflowDefinition[]>().default([]),
 })

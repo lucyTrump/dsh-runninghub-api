@@ -89,7 +89,12 @@ export class RunningHubTaskRunner {
     return record
   }
 
-  /** Cancel a queued or running task (PENDING tasks drop out of the local queue). */
+  /**
+   * Cancel a queued or running task (PENDING tasks drop out of the local
+   * queue). Callers without an agent identity (the settings/panel RPCs) leave
+   * `owner` undefined: the submit-time owner stands in, since the jobs fence
+   * rejects a no-agent caller for owned jobs.
+   */
   cancel(localId: string, owner?: Agent): 'requested' | 'not-found' | 'already-finished' {
     const record = this.ledger.get(localId)
     if (record === undefined) return 'not-found'
@@ -102,7 +107,53 @@ export class RunningHubTaskRunner {
       return 'requested'
     }
     if (this.jobs === undefined || record.jobId === undefined) return 'already-finished'
-    return this.jobs.kill(JobId(record.jobId), owner)
+    try {
+      return this.jobs.kill(JobId(record.jobId), owner ?? this.owners.get(localId))
+    } catch {
+      // Stale or foreign job handle (poller gone, or owned by a dead session):
+      // settle the record locally and cancel at the platform directly. A
+      // surviving foreign poller converges to a terminal state on its own.
+      if (record.taskId !== undefined) {
+        void this.gateway().cancel(record.taskId).catch(() => {})
+      }
+      record.status = 'CANCELLED'
+      record.finishedAt = new Date().toISOString()
+      this.ledger.upsert(record)
+      void this.ledger.save()
+      return 'requested'
+    }
+  }
+
+  /**
+   * One-shot platform re-query for every non-terminal record: the panel's
+   * manual refresh, and the recovery path for a record whose poller is gone.
+   * Per-task failures leave the stale status in place.
+   */
+  async refresh(): Promise<void> {
+    const gateway = this.gateway()
+    for (const record of this.ledger.live()) {
+      if (record.taskId === undefined) continue
+      try {
+        const result = await gateway.outputs(record.taskId)
+        if (result.code === 0) {
+          record.outputs = await this.saveResults(gateway, result.data ?? [], record)
+          record.status = 'SUCCEEDED'
+          record.finishedAt = new Date().toISOString()
+        } else if (result.code === 804) {
+          record.status = 'RUNNING'
+        } else if (result.code === 813) {
+          record.status = 'QUEUED'
+        } else if (result.code === 805) {
+          record.status = 'FAILED'
+          record.error = this.failureMessage(result)
+          record.finishedAt = new Date().toISOString()
+        }
+        this.ledger.upsert(record)
+      } catch {
+        // Keep the stale record; the next refresh or poller retries.
+      }
+    }
+    void this.ledger.save()
   }
 
   gateway(): RunningHubGateway {

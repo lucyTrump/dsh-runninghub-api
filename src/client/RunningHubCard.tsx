@@ -561,6 +561,23 @@ export function RunningHubCard(props: RunningHubCardProps) {
       </div>
       <div className={css.field}>
         <div className={css.toggleRow}>
+          <span className={css.label}>{t("taskPanelEnabled")}</span>
+          {state.taskPanelEnabledOverridden ? (
+            <Tag tone="neutral">{t("overridden")}</Tag>
+          ) : null}
+          <Switch
+            checked={state.taskPanelEnabled}
+            label={t("taskPanelEnabled")}
+            disabled={disabled}
+            onChange={(checked) => {
+              props.editTaskPanelEnabled(checked);
+            }}
+          />
+        </div>
+        <p className={css.hint}>{t("taskPanelEnabledHint")}</p>
+      </div>
+      <div className={css.field}>
+        <div className={css.toggleRow}>
           <span className={css.label}>{t("describeModel")}</span>
           <div className={css.modelPicker} ref={pickerRef}>
             <button

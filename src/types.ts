@@ -65,6 +65,32 @@ export interface RunTestData {
   nodeInfoList: NodeInfoItem[]
 }
 
+/** One ledger task as the floating panel renders it (mirrors ledger TaskStatus). */
+export interface TaskSummary {
+  localId: string
+  taskId?: string
+  status: 'PENDING' | 'QUEUED' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'TIMEOUT'
+  label?: string
+  workflowId: string
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+  error?: string
+}
+
+/** The panel's task list, ledger order (oldest first). */
+export interface ListTasksData {
+  tasks: TaskSummary[]
+}
+
+export interface CancelTaskRequest {
+  localId: string
+}
+
+export interface CancelTaskData {
+  outcome: 'requested' | 'not-found' | 'already-finished'
+}
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     /** No API key in the resolved `runninghub` settings. */

@@ -3,6 +3,20 @@
   "version": "0.1.0",
   "description": "DeepSeek Harness plugin: run RunningHub cloud ComfyUI workflows — settings card, media upload cache, concurrency gate, background tasks. · DSH 插件：在对话里运行 RunningHub 云端 ComfyUI 工作流。",
   "license": "MIT",
+  "author": "lucyTrump",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "runninghub",
+    "comfyui",
+    "workflow"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lucyTrump/dsh-runninghub-api.git"
+  },
+  "homepage": "https://github.com/lucyTrump/dsh-runninghub-api#readme",
+  "bugs": "https://github.com/lucyTrump/dsh-runninghub-api/issues",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

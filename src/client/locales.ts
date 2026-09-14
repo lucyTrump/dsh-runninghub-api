@@ -36,6 +36,8 @@ export const en = {
   maxConcurrentTasksHint: 'Local gate on simultaneously running tasks.',
   uploadUseLegacy: 'Use legacy upload endpoint',
   uploadUseLegacyHint: 'Fall back to the legacy multipart upload API.',
+  taskPanelEnabled: 'Floating task panel',
+  taskPanelEnabledHint: 'Show a floating panel over the app listing running and recent tasks, with one-click cancel.',
   describeModel: 'Description model',
   describeModelDefault: 'Default (agent model)',
   describeModelDefaultOf: 'Default ({model})',
@@ -88,6 +90,22 @@ export const en = {
   toolviewTitle: 'RunningHub task',
   toolviewLocalId: 'Task',
   toolviewUnknownWorkflow: 'workflow',
+  // Task panel (floating overlay)
+  taskPanelTitle: 'RunningHub tasks',
+  taskPanelEmpty: 'No tasks yet.',
+  taskPanelRefresh: 'Refresh',
+  taskPanelRefreshing: 'Refreshing…',
+  taskPanelCancel: 'Cancel',
+  taskPanelCancelling: 'Cancelling…',
+  taskPanelLive: 'Active',
+  taskPanelRecent: 'Recent',
+  taskStatusPENDING: 'local queue',
+  taskStatusQUEUED: 'platform queue',
+  taskStatusRUNNING: 'running',
+  taskStatusSUCCEEDED: 'succeeded',
+  taskStatusFAILED: 'failed',
+  taskStatusCANCELLED: 'cancelled',
+  taskStatusTIMEOUT: 'timeout',
 }
 
 export const zh = {
@@ -126,6 +144,8 @@ export const zh = {
   maxConcurrentTasksHint: '本地并发闸门上同时运行的任务数。',
   uploadUseLegacy: '使用旧版上传接口',
   uploadUseLegacyHint: '回退到旧版 multipart 上传 API。',
+  taskPanelEnabled: '悬浮任务面板',
+  taskPanelEnabledHint: '在界面上悬浮显示任务列表，可查看进行中/最近的任务并一键取消。',
   describeModel: '描述生成模型',
   describeModelDefault: '默认（跟随 Agent 模型）',
   describeModelDefaultOf: '默认（{model}）',
@@ -178,6 +198,22 @@ export const zh = {
   toolviewTitle: 'RunningHub 任务',
   toolviewLocalId: '任务',
   toolviewUnknownWorkflow: '工作流',
+  // 任务面板（悬浮层）
+  taskPanelTitle: 'RunningHub 任务',
+  taskPanelEmpty: '暂无任务。',
+  taskPanelRefresh: '刷新',
+  taskPanelRefreshing: '刷新中…',
+  taskPanelCancel: '取消',
+  taskPanelCancelling: '取消中…',
+  taskPanelLive: '进行中',
+  taskPanelRecent: '最近',
+  taskStatusPENDING: '本地排队',
+  taskStatusQUEUED: '平台排队',
+  taskStatusRUNNING: '运行中',
+  taskStatusSUCCEEDED: '成功',
+  taskStatusFAILED: '失败',
+  taskStatusCANCELLED: '已取消',
+  taskStatusTIMEOUT: '超时',
 }
 
 export type RunningHubLocaleKey = keyof typeof en
