@@ -1,4 +1,4 @@
-/** RunningHub settings card registered into the `settings.plugin.item` slot. */
+/** RunningHub configuration form, registered into the `plugins.bundle.config` slot. */
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -58,7 +58,12 @@ export interface RunningHubCardSlotFace extends RunningHubCardFace {
   remote: RunningHubCardRemote;
 }
 
-export type RunningHubCardProps = PropsRuntime<"settings.plugin.item"> &
+/**
+ * Slot props. The Plugins page asks a bundle's own form for the `page` view
+ * only (a bundle's one-liner is the package description), so `view` is not
+ * branched on here.
+ */
+export type RunningHubCardProps = PropsRuntime<"plugins.bundle.config"> &
   PropsLocale<"settings.runninghub"> &
   InjectFace<RunningHubCardSlotFace>;
 

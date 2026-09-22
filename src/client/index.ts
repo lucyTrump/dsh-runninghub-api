@@ -1,6 +1,12 @@
 /**
- * RunningHub settings card, browser half: one `settings.plugin.item` entry
- * keyed by the `runninghub` namespace the host plugin registers.
+ * RunningHub settings card, browser half: one `plugins.bundle.config` entry
+ * keyed by this bundle's package name, which the Plugins page renders on the
+ * bundle's own page.
+ *
+ * DSH 0.1.6-alpha.2 moved plugin configuration from the Settings section to
+ * the Plugins page and retired the `settings.plugin.item` slot this card used
+ * to register into; a card left on the retired slot never mounts, because
+ * `slots.inject` waits for a declaration that no longer happens.
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -8,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 // The generated Remote contribution (built by scripts/gen-typert.mjs). A
 // package self-reference ('dsh-runninghub-api/remote') would need the package
 // linked into its own node_modules at build time; the relative path always
@@ -43,6 +49,15 @@ export type { RunningHubCardState } from './runninghub-card-controller.ts'
 const NS = 'settings.runninghub'
 
 /**
+ * Key this bundle's configuration registers under. The Plugins page pairs a
+ * `plugins.bundle.config` entry with the installed bundle whose package name
+ * the key matches, so it must stay the package name in `package.json` — the
+ * same name the bundle's `cordis.patch.yml` row (and `dsh.profile.bundles`)
+ * carries.
+ */
+const BUNDLE_NAME = 'dsh-runninghub-api'
+
+/**
  * Required services (cordis fiber inject). `remote.credentials` writes the API
  * key. `remote.runninghub` is NOT injected: as an out-of-tree plugin this card
  * mounts its own Remote contribution below (an inject entry cannot depend on a
@@ -51,7 +66,7 @@ const NS = 'settings.runninghub'
 export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.credentials']
 
 /**
- * Mount the RunningHub settings card in the configurable-plugins tab.
+ * Mount the RunningHub configuration form on the Plugins page's bundle page.
  * @param ctx - the browser plugin context.
  */
 export async function apply(ctx: ClientContext): Promise<void> {
@@ -73,9 +88,11 @@ const cardPlugin = {
   const scope = ctx.settingsScope.bind<RunningHubSection>({ namespace: RUNNINGHUB_NS })
   const controller = new RunningHubCardController(scope, ctx)
 
-  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
-    name: 'settings.plugin.item',
-    key: RUNNINGHUB_NS,
+  // Bundle page form: the Plugins page renders this between the bundle's
+  // description and its rows, in the `page` view only.
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: BUNDLE_NAME,
     locale: NS,
     inject: (): RunningHubCardSlotFace => ({
       ...controller.face(),

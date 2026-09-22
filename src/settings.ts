@@ -3,7 +3,7 @@
 import z from '@deepseek-ai/schemastery'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
-/** Settings namespace the Plugins page edits (`settings.plugin.item` key). */
+/** Settings namespace the Plugins page edits (this bundle's `plugins.bundle.config` entry). */
 export const RUNNINGHUB_NS = 'runninghub'
 
 export const DEFAULT_BASE_URL = 'https://www.runninghub.cn'

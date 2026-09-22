@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin that integrates [RunningHub](https://www.runninghub.cn) cloud ComfyUI workflows: a settings card for your API key and workflow library, eight `runninghub_*` tools for agents, a sha256 media upload cache, a local concurrency gate with FIFO queueing and timeouts, background tasks with completion notifications, and a durable task ledger with automatic restart recovery.
+A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plugin that integrates [RunningHub](https://www.runninghub.cn) cloud ComfyUI workflows: a configuration form for your API key and workflow library, eight `runninghub_*` tools for agents, a sha256 media upload cache, a local concurrency gate with FIFO queueing and timeouts, background tasks with completion notifications, and a durable task ledger with automatic restart recovery.
 
 ## Install
 
@@ -10,7 +10,7 @@ A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) plug
 dsh plugin --profile web add dsh-runninghub-api
 ```
 
-or install/update from the in-app plugin market (dshmarket). Then open **Settings → Plugins → RunningHub** to add your API key and workflows.
+or install/update from the in-app plugin market (dshmarket). Then open the sidebar's **Plugins** page and open the **dsh-runninghub-api** card: the configuration form sits below the description (on DSH ≥ 0.1.6-alpha.2, plugin configuration moved out of **Settings → Plugins** onto the Plugins page).
 
 ## Settings (`runninghub` namespace)
 
@@ -32,7 +32,7 @@ or install/update from the in-app plugin market (dshmarket). Then open **Setting
 
 ## Remote (`ctx.remote.runninghub`)
 
-`fetchWorkflow` (workflow JSON fetch + parse), `validateWorkflow` (free dry-run payload assembly), `runTest` (real paid submit for the settings card), `testConnection`. The browser half self-mounts this namespace via `ctx.remote.$mount()` at startup.
+`fetchWorkflow` (workflow JSON fetch + parse), `validateWorkflow` (free dry-run payload assembly), `runTest` (real paid submit for the configuration form), `testConnection`. The browser half self-mounts this namespace via `ctx.remote.$mount()` at startup.
 
 ## Development
 

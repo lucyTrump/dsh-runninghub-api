@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。设置卡片管理 API Key 与工作流库；8 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。插件自带的配置表单管理 API Key 与工作流库；8 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
 
 ## 安装
 
@@ -10,7 +10,7 @@
 dsh plugin --profile web add dsh-runninghub-api
 ```
 
-或从应用内插件市场（dshmarket）安装/更新。然后打开 **设置 → 插件 → RunningHub** 添加 API Key 和工作流。
+或从应用内插件市场（dshmarket）安装/更新。然后打开侧边栏 **插件（Plugins）** 页面，点开 **dsh-runninghub-api** 卡片，配置表单在描述下方（DSH ≥ 0.1.6-alpha.2：插件配置已从「设置 → 插件」迁到 Plugins 页面）。
 
 ## 设置（`runninghub` 命名空间）
 
@@ -32,7 +32,7 @@ dsh plugin --profile web add dsh-runninghub-api
 
 ## Remote（`ctx.remote.runninghub`）
 
-`fetchWorkflow`（拉取工作流 JSON + 解析）、`validateWorkflow`（免费干跑组装负载）、`runTest`（设置卡片用的真实付费提交）、`testConnection`。浏览器半在启动时通过 `ctx.remote.$mount()` 自挂载该命名空间。
+`fetchWorkflow`（拉取工作流 JSON + 解析）、`validateWorkflow`（免费干跑组装负载）、`runTest`（配置表单用的真实付费提交）、`testConnection`。浏览器半在启动时通过 `ctx.remote.$mount()` 自挂载该命名空间。
 
 ## 开发
 

@@ -1,8 +1,9 @@
 /**
- * One plugin's card: a header naming the plugin and what its settings govern,
+ * One plugin's form: a header naming the plugin and what its settings govern,
  * disclosing that plugin's controls in place, with the save that writes them.
- * Mirrors the DSH settings-plugins card chrome (same CSS-module look) so the
- * RunningHub card reads natively beside the built-in cards.
+ * The Plugins page draws the bundle's title, icon, and crumb itself and renders
+ * this below them, so the card carries only the plugin's own name and copy. It
+ * opens expanded: the page it sits on exists for this one bundle.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -39,7 +40,7 @@ export interface PluginCardProps {
  * @returns the card, or nothing when the namespace is unavailable.
  */
 export function PluginCard(props: PluginCardProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const saveStarted = useRef(false);
   const { state } = props;
   // Collapse only after Host-confirmed settlement; a rejected write keeps its
@@ -57,7 +58,7 @@ export function PluginCard(props: PluginCardProps) {
   const title = props.t(props.titleKey);
   const blocked = !state.dirty || state.invalid || state.saving;
   return (
-    <li className={clsx(css.card, open && css.cardOpen)}>
+    <div className={clsx(css.card, open && css.cardOpen)}>
       <button
         type="button"
         className={css.header}
@@ -115,6 +116,6 @@ export function PluginCard(props: PluginCardProps) {
           </div>
         </div>
       ) : null}
-    </li>
+    </div>
   );
 }
