@@ -5,6 +5,7 @@
  */
 
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import type { ObjectInfoRegistry } from './nodeinfo.ts'
 import type { MediaSlot, NodeParamOverride } from './settings.ts'
 
 export interface WorkflowNodeInfo {
@@ -103,11 +104,25 @@ export function parseWorkflowPrompt(prompt: string): ParsedWorkflow {
   return { nodes, nodeDefaults, mediaSlots }
 }
 
+/**
+ * Parse a prompt held by a saved definition, which is either the parsed graph
+ * (settings) or the raw JSON text (a `workflowJsonPath` run). Undefined when
+ * the prompt is missing or unparseable — callers treat that as "no detail".
+ */
+export function parseStoredPrompt(prompt: JsonValue | undefined): ParsedWorkflow | undefined {
+  if (prompt === undefined || prompt === null) return undefined
+  try {
+    return parseWorkflowPrompt(typeof prompt === 'string' ? prompt : JSON.stringify(prompt))
+  } catch {
+    return undefined
+  }
+}
+
 // ── Graph surgery (api-format prompt editing) ───────────────────────────────
 // Ported from Omni-Canvas src/lib/runninghub/workflow.ts: the submit-time
 // normalization for /task/openapi/create's `workflow` field. A media slot
-// with no supplied media is CUT from the graph (its Load node removed, links
-// cleaned, downstream ref_* inputs cleared) — never replaced with a blank
+// with no supplied media is CUT from the graph (its Load node removed and
+// every node left without inputs along with it) — never replaced with a blank
 // placeholder.
 
 export type ApiWorkflow = Record<string, { class_type?: string; inputs?: Record<string, unknown> }>
@@ -116,74 +131,80 @@ function isGraphLink(value: unknown): value is [string, number] {
   return Array.isArray(value) && value.length === 2 && typeof value[0] === 'string'
 }
 
-/** Remove the given nodes and every link input pointing to them. */
-export function removeWorkflowNodes(workflow: ApiWorkflow, removeIds: ReadonlySet<string>): ApiWorkflow {
-  if (removeIds.size === 0) return workflow
-  const next: ApiWorkflow = {}
-  for (const [id, node] of Object.entries(workflow)) {
-    if (removeIds.has(id)) continue
-    const inputs = node.inputs ?? {}
-    const cleaned: Record<string, unknown> = {}
-    for (const [name, value] of Object.entries(inputs)) {
-      if (isGraphLink(value) && removeIds.has(value[0])) continue
-      cleaned[name] = value
-    }
-    next[id] = { ...node, inputs: cleaned }
-  }
-  return next
-}
-
 /**
- * Nodes downstream of `startIds` via links (including intermediates and the
- * final consumers — e.g. removing a LoadAudio also taints the ZNGB_AudioCrop
- * it fed and the MiniMaxH3ReferenceToVideo behind that).
+ * Drop the given nodes and every link input pointing to them.
+ * @returns the stripped graph plus the ids that lost at least one link.
  */
-export function downstreamAffected(workflow: ApiWorkflow, startIds: ReadonlySet<string>): Set<string> {
-  const affected = new Set<string>()
-  const queue = [...startIds]
-  const seen = new Set<string>(startIds)
-  while (queue.length > 0) {
-    const cur = queue.shift() as string
-    for (const [id, node] of Object.entries(workflow)) {
-      if (seen.has(id)) continue
-      const inputs = node.inputs ?? {}
-      for (const value of Object.values(inputs)) {
-        if (isGraphLink(value) && value[0] === cur) {
-          seen.add(id)
-          affected.add(id)
-          queue.push(id)
-          break
-        }
-      }
-    }
-  }
-  return affected
-}
-
-const REF_INPUT_RE = /^ref_(images|videos|audios)\./
-
-/**
- * Clear ref_* inputs (ref_images.ref_image_N etc.) that link to affected
- * nodes. The ref-prefix guard keeps the main sampling chain (whose nodes are
- * also "affected" downstream) intact.
- */
-export function clearRefLinksToAffected(workflow: ApiWorkflow, affectedIds: ReadonlySet<string>): ApiWorkflow {
-  if (affectedIds.size === 0) return workflow
-  const next: ApiWorkflow = {}
+function stripNodes(workflow: ApiWorkflow, goneIds: ReadonlySet<string>): { graph: ApiWorkflow, lost: Set<string> } {
+  const graph: ApiWorkflow = {}
+  const lost = new Set<string>()
   for (const [id, node] of Object.entries(workflow)) {
-    const inputs = node.inputs ?? {}
-    let changed = false
+    if (goneIds.has(id)) continue
     const cleaned: Record<string, unknown> = {}
-    for (const [name, value] of Object.entries(inputs)) {
-      if (REF_INPUT_RE.test(name) && isGraphLink(value) && affectedIds.has(value[0])) {
-        changed = true
+    for (const [name, value] of Object.entries(node.inputs ?? {})) {
+      if (isGraphLink(value) && goneIds.has(value[0])) {
+        lost.add(id)
         continue
       }
       cleaned[name] = value
     }
-    next[id] = changed ? { ...node, inputs: cleaned } : node
+    graph[id] = { ...node, inputs: cleaned }
   }
-  return next
+  return { graph, lost }
+}
+
+/**
+ * Still runnable after losing links? No when nothing links in any more, nor
+ * when a registry-required input is gone. The second half is the case a shared
+ * scalar hides: `easy imageScaleDownToSize` keeps `size: ["126", 0]` (a shared
+ * Int) after its `images` link is cut, so it looks fed but RunningHub rejects
+ * it with "Required input is missing". Class types the registry does not know
+ * fall back to the link-only rule.
+ */
+function hasUsableInputs(
+  node: ApiWorkflow[string] | undefined,
+  registry: ObjectInfoRegistry | undefined,
+): boolean {
+  const entries = Object.entries(node?.inputs ?? {})
+  if (!entries.some(([, value]) => isGraphLink(value))) return false
+  const classType = node?.class_type
+  if (registry === undefined || classType === undefined) return true
+  const required = Object.keys(registry[classType]?.input?.required ?? {})
+  if (required.length === 0) return true
+  const names = new Set<string>()
+  for (const [name] of entries) {
+    names.add(name)
+    names.add(name.split('.')[0] ?? name)
+  }
+  return required.every(field => names.has(field))
+}
+
+/**
+ * Remove the given nodes, then cascade: a node that just lost a link and can no
+ * longer satisfy its required inputs was only serving the cut media (e.g.
+ * `LoadImage → easy imageScaleDownToSize → TextEncodeQwenImage21.images.image_1`)
+ * and is dead weight now — kept, RunningHub rejects it with "Required input is
+ * missing". Nodes still fed by the rest of the graph (the optional `ref_*`
+ * consumers, the main sampling chain) keep running without the link. A node
+ * that never had a link input at all is untouched.
+ */
+export function removeWorkflowNodes(
+  workflow: ApiWorkflow,
+  removeIds: ReadonlySet<string>,
+  registry?: ObjectInfoRegistry,
+): ApiWorkflow {
+  if (removeIds.size === 0) return workflow
+  const gone = new Set(removeIds)
+  let graph: ApiWorkflow
+  for (;;) {
+    const stripped = stripNodes(workflow, gone)
+    graph = stripped.graph
+    const lost = stripped.lost
+    const drained = [...lost].filter(id => !hasUsableInputs(graph[id], registry))
+    if (drained.length === 0) break
+    for (const id of drained) gone.add(id)
+  }
+  return graph
 }
 
 /** Set one node input field in the graph (scalar or link). */

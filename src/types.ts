@@ -43,11 +43,13 @@ export interface DescribeWorkflowRequest {
   locale?: string
 }
 
-/** LLM workflow analysis: a catalog description plus proposed attention params. */
+/** LLM workflow analysis: a catalog description, proposed attention params, and usage notes. */
 export interface DescribeWorkflowData {
   description: string
   /** Proposed attention params ("nodeId.fieldName"), validated against the workflow. */
   attention?: string[]
+  /** One line per gotcha worth remembering before the next run. */
+  usageNote?: string
 }
 
 export interface RunTestRequest {
@@ -99,6 +101,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'runninghub/fetch-failed': {}
     /** Dry-run payload assembly failed. */
     'runninghub/validate-failed': {}
+    /** A param value is outside its node's declared combo choices. */
+    'runninghub/invalid-params': {}
     /** The API key was rejected by RunningHub (connection probe). */
     'runninghub/auth-failed': {}
     /** No LLM service or default model is configured for description generation. */

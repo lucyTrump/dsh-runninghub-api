@@ -63,7 +63,7 @@ const BUNDLE_NAME = 'dsh-runninghub-api'
  * mounts its own Remote contribution below (an inject entry cannot depend on a
  * service the same plugin provides).
  */
-export const inject = ['slots', 'locale', 'settingsScope', 'remote', 'remote.credentials']
+export const inject = ['slots', 'locale', 'configForms', 'remote', 'remote.credentials']
 
 /**
  * Mount the RunningHub configuration form on the Plugins page's bundle page.
@@ -81,12 +81,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
 const cardPlugin = {
   name: 'dsh-runninghub-api: card',
-  inject: ['slots', 'locale', 'settingsScope', 'remote.credentials', 'remote.runninghub', 'remote.session'],
+  inject: ['slots', 'locale', 'configForms', 'remote.credentials', 'remote.runninghub', 'remote.session'],
   apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-client-runninghub: locale')
 
-  const scope = ctx.settingsScope.bind<RunningHubSection>({ namespace: RUNNINGHUB_NS })
-  const controller = new RunningHubCardController(scope, ctx)
+  // The Host half owns a Cordis Config with volatile fields; the entry id is
+  // the namespace, and this form is the same object the Plugins page passes to
+  // pages it renders itself.
+  const form = ctx.configForms.get<RunningHubSection>(RUNNINGHUB_NS)
+  const controller = new RunningHubCardController(form, ctx)
 
   // Bundle page form: the Plugins page renders this between the bundle's
   // description and its rows, in the `page` view only.
@@ -117,7 +120,7 @@ const cardPlugin = {
     id: 'runninghub-tasks',
     locale: NS,
     inject: (): TaskPanelInjected => ({
-      scope,
+      form,
       listTasks: () => ctx.remote.runninghub.listTasks(),
       cancelTask: localId => ctx.remote.runninghub.cancelTask({ localId }),
       refreshTasks: () => ctx.remote.runninghub.refreshTasks(),

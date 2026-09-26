@@ -13,7 +13,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RunningHubConfig } from '../settings.ts'
 import type { WorkflowDefinition } from '../types.ts'
 import {
@@ -117,7 +117,7 @@ export class RunningHubCardController {
    * answers for the credential the section references.
    */
   constructor(
-    private readonly scope: SettingsScope<RunningHubSection>,
+    private readonly scope: ConfigForm<RunningHubSection>,
     private readonly ctx: ClientContext,
   ) {
     this.form = new CardForm(
@@ -273,7 +273,7 @@ export class RunningHubCardController {
 }
 
 /** Whether the user layer holds an own entry for the field. */
-function hasOwn(snapshot: SettingsScopeSnapshot<RunningHubSection>, field: string): boolean {
+function hasOwn(snapshot: ConfigFormSnapshot<RunningHubSection>, field: string): boolean {
   const user = snapshot.user as Record<string, unknown> | undefined
   return user !== undefined && Object.hasOwn(user, field)
 }
@@ -283,7 +283,7 @@ function hasOwn(snapshot: SettingsScopeSnapshot<RunningHubSection>, field: strin
  * @param snapshot - the current scope snapshot.
  * @returns the reference to address.
  */
-function refOf(snapshot: SettingsScopeSnapshot<RunningHubSection>): string {
+function refOf(snapshot: ConfigFormSnapshot<RunningHubSection>): string {
   const declared = snapshot.value?.apiKeyEnv
   return declared !== undefined && declared.length > 0 ? declared : DEFAULT_API_KEY_REF
 }

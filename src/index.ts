@@ -17,7 +17,6 @@ import type { Context } from '@deepseek-ai/cordis'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-settings'
-import type { SettingsProvider } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-skill'
 import { Config, DEFAULT_API_KEY_ENV, RUNNINGHUB_NS, type RunningHubConfig } from './settings.ts'
 import type { WorkflowDefinition } from './settings.ts'
@@ -46,17 +45,35 @@ export type {
 
 export const name = 'runninghub'
 
-export const inject: string[] = ['tools']
+export const inject: string[] = ['tools', 'settings']
 
 /**
- * Register the settings section, mount the workflow-management Remote, create
- * the durable task runner, and register the model-facing tools. The mounted
- * cordis config is the composition base; the browser card edits the user layer
- * over it. `current` is the live accessor to the resolved config.
+ * Mount the workflow-management Remote, create the durable task runner, and
+ * register the model-facing tools. `config` holds this entry's live references:
+ * the browser card owns a configuration form over the same fields (namespace =
+ * this entry's id), so every read goes through `.get()` and sees the latest
+ * write. `current` is the snapshot consumers read one operation from.
  */
-export function apply(ctx: Context, config: RunningHubConfig = {}): void {
-  let current: () => RunningHubConfig = () => config
-  let settingsProvider: SettingsProvider | undefined
+export function apply(ctx: Context, config: Config): void {
+  const current = (): RunningHubConfig => {
+    const apiKey = config.apiKey.get()
+    const defaultWorkflowLabel = config.defaultWorkflowLabel.get()
+    const describeModel = config.describeModel.get()
+    return {
+      apiKeyEnv: config.apiKeyEnv.get(),
+      baseUrl: config.baseUrl.get(),
+      pollIntervalMs: config.pollIntervalMs.get(),
+      runTimeoutMs: config.runTimeoutMs.get(),
+      queueTimeoutMs: config.queueTimeoutMs.get(),
+      maxConcurrentTasks: config.maxConcurrentTasks.get(),
+      uploadUseLegacy: config.uploadUseLegacy.get(),
+      taskPanelEnabled: config.taskPanelEnabled.get(),
+      workflows: workflowList(config),
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(defaultWorkflowLabel === undefined ? {} : { defaultWorkflowLabel }),
+      ...(describeModel === undefined ? {} : { describeModel }),
+    }
+  }
 
   // Resolve the API key per call: literal section value first (headless
   // deployments), then the credentials domain under the configured reference.
@@ -75,13 +92,10 @@ export function apply(ctx: Context, config: RunningHubConfig = {}): void {
   const runner = new RunningHubTaskRunner(() => current(), resolveApiKey, ledger, jobs)
   const objectInfos = new ObjectInfoCache()
 
-  ctx.inject(['settings'], (settingsCtx) => {
-    settingsProvider = settingsCtx.settings
-    settingsCtx.settings.installSection(ctx, RUNNINGHUB_NS, Config, config, {
-      setSource: (source) => { current = source },
-      onChange: () => {},
-    })
-  })
+  // This plugin ships its own card on the Plugins page (slot
+  // `plugins.bundle.config`), so the settings service must not also synthesize
+  // a schema-driven page for the same entry.
+  ctx.effect(() => ctx.settings.configure({ auto: false }, ctx.fiber), 'runninghub: own configuration page')
 
   ctx.plugin(RunningHubController, { getConfig: () => current(), resolveApiKey, objectInfos, getRunner: () => runner })
 
@@ -92,8 +106,7 @@ export function apply(ctx: Context, config: RunningHubConfig = {}): void {
     objectInfos,
     mediaCache,
     saveWorkflows: async (workflows: WorkflowDefinition[]) => {
-      if (settingsProvider === undefined) throw new Error('settings service unavailable')
-      await settingsProvider.update(RUNNINGHUB_NS, { workflows })
+      await ctx.settings.update(RUNNINGHUB_NS, { workflows })
     },
   })
 
@@ -110,6 +123,19 @@ export function apply(ctx: Context, config: RunningHubConfig = {}): void {
   // M5: startup recovery — resume RUNNING/QUEUED tasks (re-query) and re-submit PENDING tasks.
   void runner.recover()
   void mediaCache.load()
+}
+
+/**
+ * The saved-workflow list as plain data. `Volatile.get()` answers a deeply
+ * readonly snapshot, and that mapped type does not terminate over a config
+ * field as recursive as `JsonValue` (TS2589), so read the reference through a
+ * plain face of its own.
+ * @param config - this entry's live config.
+ * @returns the current workflow definitions.
+ */
+function workflowList(config: Config): WorkflowDefinition[] {
+  const ref = config.workflows as unknown as { get(): WorkflowDefinition[] }
+  return ref.get()
 }
 
 const SKILL_CONTENT = `# RunningHub
@@ -132,6 +158,10 @@ Run cloud ComfyUI workflows through the \`runninghub_*\` tools.
    running in the background; you do not need to busy-poll.
 4. On SUCCESS the result lists output files (fileUrl/fileName). Present them
    to the user.
+5. On FAILED, read the error before re-running: if it is a workflow-level
+   pitfall (a legal-value list, the instance tier it needs, how an unused slot
+   must be handled), record it with \`runninghub_note_workflow\` so the next run
+   — and the model analyzing this workflow — knows it.
 
 ## Notes
 
@@ -144,15 +174,16 @@ Run cloud ComfyUI workflows through the \`runninghub_*\` tools.
   chat-attachment auto-matching.
 - Submissions send the edited graph JSON (create API's \`workflow\` field):
   param defaults/overrides are baked into node inputs and media slots with
-  NO supplied media are CUT from the graph (Load node removed, links cleaned,
-  downstream ref_* inputs cleared — never placeholder-filled). So "no
+  NO supplied media are CUT from the graph (the Load node removed, and every
+  node left without inputs with it — never placeholder-filled). So "no
   reference image" really means no reference chain.
 - Params and media slots marked \`★\` are user-curated attention items:
   always review them when running. Unmarked params are intentionally fixed —
   do not analyze or override them unless the user asks; unmarked media slots
   are internal wiring. \`*\` still means required. A workflow's
   \`media note\` line is the user's media usage rule (counts, mapping
-  order) — follow it instead of re-deriving it.
+  order) and its \`usage note\` lines are gotchas recorded from earlier runs —
+  follow both instead of re-deriving them.
 - \`instanceType: "plus"\` selects the 48G-VRAM pool.
 - \`runninghub_cancel_task\` cancels by local task id.
 - \`runninghub_refresh_workflow\` re-fetches a saved workflow's latest

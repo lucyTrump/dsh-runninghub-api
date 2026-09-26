@@ -3,11 +3,10 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { JobHooks, JobOutcome, JobRegistry } from '@deepseek-ai/dsh-jobs'
+import type { JobHooks, JobOutcome, JobRegistry, JobSpec } from '@deepseek-ai/dsh-jobs'
 import { JobId } from '@deepseek-ai/dsh-jobs'
 import { RunningHubGateway } from './gateway.ts'
-import type { NodeInfoItem, ResultItem } from './gateway.ts'
+import type { NodeInfoItem, OutputsResult, ResultItem } from './gateway.ts'
 import { LedgerStore, RUNNINGHUB_OUTPUTS } from './ledger.ts'
 import type { TaskRecord } from './ledger.ts'
 import type { RunningHubConfig } from './settings.ts'
@@ -27,10 +26,18 @@ export interface SubmitInput {
   workflowRaw?: string
   /** Instance type passthrough (e.g. `plus` for the 48G-VRAM pool). */
   instanceType?: string
-  owner?: Agent
+  owner?: JobOwner
 }
 
+/** `JobSpec.owner` is a session id (a string); DSH resolves the live Agent from it.
+ *  Passing the Agent object made `jobs.start` throw `session "[object Object]" has no
+ *  live agent`, because the registry looks the owner up by SessionId. */
+type JobOwner = NonNullable<JobSpec['owner']>
+
 const TEARDOWN_REASONS = new Set(['owner disposed', 'jobs service disposed'])
+
+/** RunningHub says `code 0` but shipped nothing — never call that a success. */
+const NO_OUTPUT_ERROR = 'RunningHub reported success (code 0) but returned no result files; the graph produced nothing — check the Save node, the parameters, and the instance type (VRAM)'
 
 function sanitizeFileName(name: string): string {
   const cleaned = name.replace(/[/\\?%*:|"<>]/g, '_').trim()
@@ -47,7 +54,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export class RunningHubTaskRunner {
   private active = 0
   private queue: TaskRecord[] = []
-  private readonly owners = new Map<string, Agent | undefined>()
+  private readonly owners = new Map<string, JobOwner | undefined>()
 
   constructor(
     private readonly getConfig: () => RunningHubConfig,
@@ -59,6 +66,29 @@ export class RunningHubTaskRunner {
   maxConcurrent(): number {
     const max = this.getConfig().maxConcurrentTasks
     return max !== undefined && max > 0 ? max : 3
+  }
+
+  private pollIntervalMs(): number {
+    const interval = this.getConfig().pollIntervalMs
+    return interval !== undefined && interval > 0 ? interval : 5000
+  }
+
+  /**
+   * RunningHub answers `code 0` with an empty `data` array both while a task
+   * settles and when its graph produced nothing at all — four empty runs once
+   * sat in the ledger as green SUCCEEDED because of it. Re-query once before
+   * believing "no output files".
+   */
+  private async outputsSettled(
+    gateway: RunningHubGateway,
+    taskId: string,
+    first: OutputsResult,
+    waitMs: number,
+    signal?: AbortSignal,
+  ): Promise<OutputsResult> {
+    if (first.code !== 0 || (first.data ?? []).length > 0) return first
+    await sleep(waitMs, signal)
+    return signal?.aborted === true ? first : gateway.outputs(taskId, signal)
   }
 
   get(localId: string): TaskRecord | undefined {
@@ -95,7 +125,7 @@ export class RunningHubTaskRunner {
    * `owner` undefined: the submit-time owner stands in, since the jobs fence
    * rejects a no-agent caller for owned jobs.
    */
-  cancel(localId: string, owner?: Agent): 'requested' | 'not-found' | 'already-finished' {
+  cancel(localId: string, owner?: JobOwner): 'requested' | 'not-found' | 'already-finished' {
     const record = this.ledger.get(localId)
     if (record === undefined) return 'not-found'
     if (record.status === 'PENDING') {
@@ -131,13 +161,20 @@ export class RunningHubTaskRunner {
    */
   async refresh(): Promise<void> {
     const gateway = this.gateway()
+    const interval = this.pollIntervalMs()
     for (const record of this.ledger.live()) {
       if (record.taskId === undefined) continue
       try {
-        const result = await gateway.outputs(record.taskId)
+        const result = await this.outputsSettled(gateway, record.taskId, await gateway.outputs(record.taskId), interval)
         if (result.code === 0) {
-          record.outputs = await this.saveResults(gateway, result.data ?? [], record)
-          record.status = 'SUCCEEDED'
+          const outputs = await this.saveResults(gateway, result.data ?? [], record)
+          record.outputs = outputs
+          if (outputs.length === 0) {
+            record.status = 'FAILED'
+            record.error = NO_OUTPUT_ERROR
+          } else {
+            record.status = 'SUCCEEDED'
+          }
           record.finishedAt = new Date().toISOString()
         } else if (result.code === 804) {
           record.status = 'RUNNING'
@@ -319,8 +356,7 @@ export class RunningHubTaskRunner {
     signal: AbortSignal,
   ): Promise<JobOutcome> {
     const config = this.getConfig()
-    const interval = config.pollIntervalMs !== undefined && config.pollIntervalMs > 0
-      ? config.pollIntervalMs : 5000
+    const interval = this.pollIntervalMs()
     // Timeout split (§6.9): queueTimeoutMs bounds the platform-side QUEUED
     // phase (0 = unlimited); runTimeoutMs starts counting only once the task
     // first reports RUNNING (0 = unlimited).
@@ -333,9 +369,19 @@ export class RunningHubTaskRunner {
 
     for (;;) {
       if (signal.aborted) return { status: 'killed' }
-      const result = await gateway.outputs(record.taskId ?? '', signal)
+      const taskId = record.taskId ?? ''
+      const result = await this.outputsSettled(gateway, taskId, await gateway.outputs(taskId, signal), interval, signal)
+      if (signal.aborted) return { status: 'killed' }
       if (result.code === 0) {
         const outputs = await this.saveResults(gateway, result.data ?? [], record)
+        if (outputs.length === 0) {
+          record.status = 'FAILED'
+          record.error = NO_OUTPUT_ERROR
+          record.outputs = []
+          record.finishedAt = new Date().toISOString()
+          this.ledger.upsert(record)
+          return { status: 'failed', detail: record.error }
+        }
         record.status = 'SUCCEEDED'
         record.outputs = outputs
         record.finishedAt = new Date().toISOString()
@@ -388,6 +434,7 @@ export class RunningHubTaskRunner {
     items: ResultItem[],
     record: TaskRecord,
   ): Promise<ResultItem[]> {
+    if (items.length === 0) return []
     const dir = join(RUNNINGHUB_OUTPUTS, record.localId)
     await mkdir(dir, { recursive: true })
     const saved: ResultItem[] = []

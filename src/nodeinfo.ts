@@ -6,7 +6,8 @@
  * source (the same one the RunningHub web editor uses): each class's
  * `input.required`/`input.optional` maps a field name to `[type, options]`,
  * where `type` is a string like `INT`/`FLOAT`/`STRING`/`BOOLEAN`, or an array
- * of choices for a combo dropdown.
+ * of choices for a combo dropdown. Both combo spellings occur: the legacy
+ * `[["a","b"], {}]` and RunningHub's current `["COMBO", {"options":[...]}]`.
  */
 
 import type { NodeParamOverride } from './settings.ts'
@@ -42,10 +43,16 @@ export function inputMetaFor(
   const [type, opts] = spec as [unknown, unknown]
   const bounds = boundsOf(opts)
 
-  // Combo: the first tuple element is the choice list.
+  // Combo, legacy shape: the first tuple element is the choice list.
   if (Array.isArray(type)) {
     const options = type.map(choice => String(choice))
     return options.length > 0 ? { kind: 'select', options, ...bounds } : undefined
+  }
+  // Combo, ComfyUI V3 shape (what RunningHub now ships): ["COMBO", { options }].
+  if (String(type).toUpperCase() === 'COMBO') {
+    const choices = Array.isArray(opts) ? opts : (opts as { options?: unknown } | null)?.options
+    if (!Array.isArray(choices) || choices.length === 0) return undefined
+    return { kind: 'select', options: choices.map(choice => String(choice)), ...bounds }
   }
   switch (String(type).toUpperCase()) {
     case 'INT':

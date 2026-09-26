@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。插件自带的配置表单管理 API Key 与工作流库；8 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）插件：集成 [RunningHub](https://www.runninghub.cn) 云端 ComfyUI 工作流。插件自带的配置表单管理 API Key 与工作流库；9 个 `runninghub_*` 工具供 Agent 调用；sha256 媒体上传缓存；本地并发闸门 + FIFO 排队 + 超时；后台任务 + 完成通知；任务台账 + 重启自动恢复。
 
 ## 安装
 
@@ -28,11 +28,11 @@ dsh plugin --profile web add dsh-runninghub-api
 
 ## 工具
 
-`runninghub_list_workflows`、`runninghub_fetch_workflow`、`runninghub_run_workflow`（两阶段：缺少必填参数/媒体时返回 `needs_input` 而不提交）、`runninghub_get_task`、`runninghub_list_tasks`、`runninghub_cancel_task`、`runninghub_upload_file`（按 sha256 去重）、`runninghub_refresh_workflow`。
+`runninghub_list_workflows`、`runninghub_fetch_workflow`、`runninghub_run_workflow`（两阶段：缺少必填参数/媒体、或参数值不在节点声明的枚举里，都返回 `needs_input` 而不提交）、`runninghub_get_task`、`runninghub_list_tasks`、`runninghub_cancel_task`、`runninghub_upload_file`（按 sha256 去重）、`runninghub_refresh_workflow`、`runninghub_note_workflow`（记录该工作流的使用注意事项）。
 
 ## Remote（`ctx.remote.runninghub`）
 
-`fetchWorkflow`（拉取工作流 JSON + 解析）、`validateWorkflow`（免费干跑组装负载）、`runTest`（配置表单用的真实付费提交）、`testConnection`。浏览器半在启动时通过 `ctx.remote.$mount()` 自挂载该命名空间。
+`fetchWorkflow`（拉取工作流 JSON + 解析）、`validateWorkflow`（免费干跑组装负载）、`describeWorkflow`（LLM 生成目录描述、重点参数与使用注意事项 —— 摘要里带节点 registry 的枚举/上下限约束和该工作流最近的失败原因）、`runTest`（配置表单用的真实付费提交）、`testConnection`。浏览器半在启动时通过 `ctx.remote.$mount()` 自挂载该命名空间。
 
 ## 开发
 
@@ -52,7 +52,14 @@ pnpm build
 
 注意：用 `dsh plugin add <本目录>` 做 link 调试时，node_modules 里的 `@deepseek-ai/*` 必须是指向本地 DSH checkout 的软链（真实 npm 副本会造成 cordis 双实例）。所以每次 `pnpm install` 之后、重启 dsh 之前，重跑一次 `node scripts/link-local-dsh.mjs`。
 
-装进本机 web profile 调试（link 安装，重新构建后重启生效）：
+一条命令重建并装进本机 web profile（link 安装；会核对 profile 真的指向这次构建，再告诉你要不要重启）：
+
+```sh
+npm run update:dsh                # 指定 profile：npm run update:dsh -- <profile 目录>
+```
+
+然后重启 DSH —— dsh-hmr 只监听 profile manifest 与 patch 文件，不监听插件内容。
+首次把插件装进某个 profile：
 
 ```sh
 dsh plugin --profile web add /path/to/dsh-runninghub-api

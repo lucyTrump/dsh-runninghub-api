@@ -10,7 +10,7 @@ import { cachedUpload } from './media.ts'
 import type { MediaCache } from './media.ts'
 import { collectCurrentMedia, readMediaBytes } from './context-media.ts'
 import type { MediaAsset } from './context-media.ts'
-import { applyParamOverrides, buildNodeInfoList, buildWorkflowGraph } from './payload.ts'
+import { applyParamOverrides, buildNodeInfoList, buildWorkflowGraph, carryUserMarks, findIllegalComboValues, formatComboOptions } from './payload.ts'
 import type { RunningHubTaskRunner } from './runner.ts'
 import type { MediaSlot, NodeParamOverride, RunningHubConfig, WorkflowDefinition } from './settings.ts'
 import { enrichNodeDefaults, type ObjectInfoCache } from './nodeinfo.ts'
@@ -167,6 +167,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         label: workflow.label,
         ...(workflow.description !== undefined ? { description: workflow.description } : {}),
         ...(workflow.mediaNote !== undefined ? { mediaNote: workflow.mediaNote } : {}),
+        ...(workflow.usageNote !== undefined ? { usageNote: workflow.usageNote } : {}),
         workflowId: workflow.workflowId,
         params: workflow.nodeDefaults.map(describeParam),
         media: workflow.mediaSlots.map(describeMedia),
@@ -174,8 +175,41 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
       const summary = workflows.length === 0
         ? 'No RunningHub workflows saved yet. Add one in Settings → Plugins → RunningHub.'
         : `${workflows.length} workflow(s):\n` + items.map(item =>
-          `- ${item.label} (${item.workflowId})` + (item.description !== undefined ? ` — ${item.description}` : '') + (item.mediaNote !== undefined ? `\n  media note: ${item.mediaNote}` : '') + (item.params.length > 0 ? `\n  params: ${item.params.join(', ')}` : '') + (item.media.length > 0 ? `\n  media: ${item.media.join(', ')}` : '')).join('\n')
+          `- ${item.label} (${item.workflowId})` + (item.description !== undefined ? ` — ${item.description}` : '') + (item.mediaNote !== undefined ? `\n  media note: ${item.mediaNote}` : '') + (item.usageNote !== undefined ? `\n  usage note: ${item.usageNote.replace(/\n/g, ' / ')}` : '') + (item.params.length > 0 ? `\n  params: ${item.params.join(', ')}` : '') + (item.media.length > 0 ? `\n  media: ${item.media.join(', ')}` : '')).join('\n')
       return toJson({ workflows: items, summary })
+    },
+  }))
+
+  // ── note_workflow ──────────────────────────────────────────────────────────
+  ctx.tools.register(defineTool({
+    name: 'runninghub_note_workflow',
+    description: 'Append one line to a saved workflow\'s usage note — the gotchas the next run must know (the only legal values an enum takes, the instance type it needs, how an unused slot must be cut). Call it once after a failed run explains a workflow-level pitfall; the note is shown by runninghub_list_workflows and to the describe model.',
+    parameters: {
+      workflow: { type: 'string', required: true, description: 'The saved workflow label or workflowId.' },
+      note: { type: 'string', required: true, description: 'One short line, e.g. "4.aspect_ratio 竖版必须是 9:16 (Portrait Widescreen)" or "需要 instanceType: plus（默认实例 VRAM 不足）".' },
+    },
+    output: {
+      schema: JSON_SCHEMA,
+      render: (_args, value) => [text((value as { summary?: string }).summary ?? JSON.stringify(value, null, 2))],
+    },
+    async execute(args: { workflow: string, note: string }) {
+      const config = getConfig()
+      const workflow = findWorkflow(config, args.workflow)
+      if (workflow === undefined) {
+        return toJson({ updated: false, summary: `no saved RunningHub workflow matches "${args.workflow}"` })
+      }
+      // Newest last, oldest dropped: a note list, not a log.
+      const lines = (workflow.usageNote ?? '').split('\n').filter(line => line.trim() !== '')
+      const note = args.note.replace(/\s+/gu, ' ').trim()
+      const next = [...lines.filter(line => line !== note), note].slice(-5)
+      const updated: WorkflowDefinition = { ...workflow, usageNote: next.join('\n') }
+      const workflows = (config.workflows ?? []).map(existing => existing.workflowId === workflow.workflowId ? updated : existing)
+      await saveWorkflows(workflows)
+      return toJson({
+        updated: true,
+        usageNote: updated.usageNote,
+        summary: `usage note for "${workflow.label}" (${workflow.workflowId}) now:\n${(updated.usageNote ?? '').split('\n').map(line => `  - ${line}`).join('\n')}`,
+      })
     },
   }))
 
@@ -215,7 +249,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
     description: 'Submit a saved RunningHub workflow as a task. Resolves the workflow by label or workflowId, applies optional param overrides, and returns a local task id for runninghub_get_task/runninghub_cancel_task. With workflowJsonPath, runs a local api-format JSON file instead of the server-side graph (the file IS the graph, so node edits/removals are honored).',
     parameters: {
       workflow: { type: 'string', description: 'The saved workflow label or workflowId. Optional when workflowJsonPath is given.' },
-      workflowJsonPath: { type: 'string', description: 'Absolute path to a local api-format workflow JSON file; when set, that exact graph is submitted (workflowId is ignored by RunningHub).' },
+      workflowJsonPath: { type: 'string', description: 'Absolute path to a local api-format workflow JSON file; when set, that exact graph is submitted as the `workflow` field. RunningHub still requires a real workflowId, so pair it with workflow (a saved label/id, or a numeric workflowId).' },
       overrides: { type: 'object', additionalProperties: true, description: 'Overrides keyed by "nodeId.fieldName". Param fields set node params (e.g. {"121.text": "a pig"}); media-slot fields set reference media directly with the fileName from runninghub_upload_file or a URL for url-slots (e.g. {"102.image": "api/xxx.png"}). Explicit media overrides win over chat-attachment auto-matching.' },
       instanceType: { type: 'string', description: 'Optional instance type passthrough, e.g. "plus" for the 48G-VRAM pool.' },
     },
@@ -254,9 +288,21 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         const filePrompt = await readFile(args.workflowJsonPath, 'utf8')
         const parsed = parseWorkflowPrompt(filePrompt)
         const base = args.workflowJsonPath.split('/').pop() ?? 'workflow.json'
+        // RunningHub rejects the create call with `code 301 must be greater
+        // than 0` when workflowId is "0", even though the graph comes from
+        // `workflow` — so a real id (a saved workflow, or a numeric id) is
+        // required, not ignored.
+        const saved = args.workflow !== undefined ? findWorkflow(config, args.workflow) : undefined
+        const inline = args.workflow !== undefined && /^\d+$/.test(args.workflow) && args.workflow !== '0'
+          ? args.workflow
+          : undefined
+        const workflowId = saved?.workflowId ?? inline
+        if (workflowId === undefined) {
+          throw new Error('workflowJsonPath needs a real RunningHub workflowId: pass workflow="<saved label or workflowId>" (RunningHub rejects workflowId 0)')
+        }
         workflow = {
-          label: args.workflow ?? base.replace(/\.json$/i, ''),
-          workflowId: '0',
+          label: saved?.label ?? args.workflow ?? base.replace(/\.json$/i, ''),
+          workflowId,
           prompt: filePrompt,
           nodeDefaults: parsed.nodeDefaults,
           mediaSlots: parsed.mediaSlots,
@@ -310,7 +356,8 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
           why: `required ${s.type} media slot has no value: upload one with runninghub_upload_file and re-run with overrides {"${s.nodeId}.${s.fieldName}": "<fileName>"}`,
         })),
       ]
-      if (missing.length > 0) {
+      /** Stop before any upload or submit and hand the caller exactly what to fix. */
+      const needsInput = (missing: { nodeId: string, fieldName: string, label: string, why: string }[]) => {
         const summary = [
           `needs_input: workflow "${workflow.label}" cannot be submitted yet (nothing was submitted or uploaded).`,
           `missing:\n${missing.map(m => `  - ${m.nodeId}.${m.fieldName} (${m.label}): ${m.why}`).join('\n')}`,
@@ -318,19 +365,33 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         ].join('\n')
         return toJson({ status: 'needs_input', workflowId: workflow.workflowId, label: workflow.label, missing, summary })
       }
+      if (missing.length > 0) return needsInput(missing)
       const gateway = await requireGateway()
+      // A value outside a combo's list is rejected by RunningHub only once a PAID
+      // task reaches that node (`Value not in list`), so check it against the node
+      // registry — or the choices a previous enrichment stored — first.
+      const registry = await objectInfos.get(() => gateway.fetchObjectInfo())
+      const illegal = findIllegalComboValues(merged, registry)
+      if (illegal.length > 0) {
+        return needsInput(illegal.map(v => ({
+          nodeId: v.nodeId,
+          fieldName: v.fieldName,
+          label: merged.nodeDefaults.find(p => p.nodeId === v.nodeId && p.fieldName === v.fieldName)?.label ?? v.fieldName,
+          why: `"${v.value}" is not one of this node's choices: [${formatComboOptions(v.options)}] — pick a legal value and pass it via overrides`,
+        })))
+      }
       const media = await uploadAssignments(ctx, matched.assignments, gateway, mediaCache, config.uploadUseLegacy === true)
       const allMedia = [...media.nodeInfoList, ...mediaValues]
       let nodeInfoList = [...textNodeInfoList, ...allMedia]
       let workflowRaw: string | undefined
       if (workflow.prompt !== undefined && workflow.prompt !== '') {
         // Graph mode: bake params + supplied media into the stored raw graph
-        // and CUT media slots with no supplied media (remove the Load node,
-        // clean links, clear downstream ref_* inputs — never a placeholder).
+        // and CUT media slots with no supplied media (remove the Load node and
+        // every node left without inputs — never a placeholder).
         // nodeInfoList is then redundant and could reference cut nodes.
         const filledKeys = new Set(allMedia.map(m => `${m.nodeId}\u0000${m.fieldName}`))
         const unfilled = merged.mediaSlots.filter(slot => !filledKeys.has(`${slot.nodeId}\u0000${slot.fieldName}`))
-        workflowRaw = buildWorkflowGraph(merged, allMedia, unfilled)
+        workflowRaw = buildWorkflowGraph(merged, allMedia, unfilled, registry)
         nodeInfoList = []
       }
       const record = runner.submit({
@@ -339,7 +400,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         nodeInfoList,
         ...(workflowRaw !== undefined ? { workflowRaw } : {}),
         ...(args.instanceType !== undefined ? { instanceType: args.instanceType } : {}),
-        ...(exec.agent !== undefined ? { owner: exec.agent } : {}),
+        ...(exec.agent !== undefined ? { owner: exec.agent.id } : {}),
       })
       const summary = [
         workflowRaw !== undefined
@@ -385,6 +446,9 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         `task ${record.localId}: ${record.status}`,
         record.taskId !== undefined ? `RunningHub taskId: ${record.taskId}` : '',
         record.error !== undefined ? `error: ${record.error}` : '',
+        record.status === 'FAILED'
+          ? 'if this failure is a workflow-level pitfall (an enum\'s legal values, the instance tier, how media slots must be cut), record it with runninghub_note_workflow so the next run knows'
+          : '',
         record.outputs !== undefined && record.outputs.length > 0
           ? `result files:\n${record.outputs.map(o => `  - ${o.savedPath ?? o.fileUrl ?? ''}`).join('\n')}`
           : '',
@@ -434,7 +498,7 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
       render: (_args, value) => [text((value as { summary?: string }).summary ?? JSON.stringify(value, null, 2))],
     },
     async execute(args: { task: string }, exec) {
-      const outcome = runner.cancel(args.task, exec.agent)
+      const outcome = runner.cancel(args.task, exec.agent?.id)
       return toJson({ outcome, summary: `cancel ${args.task}: ${outcome}` })
     },
   }))
@@ -493,8 +557,10 @@ export function registerRunningHubTools(ctx: Context, deps: RunningHubToolDeps):
         ...workflow,
         prompt: JSON.parse(data.prompt) as JsonValue,
         fetchedAt: new Date().toISOString(),
-        nodeDefaults: parsed.nodeDefaults,
-        mediaSlots: parsed.mediaSlots,
+        // Merge, not overwrite: the fetched prompt knows nothing about the
+        // user's ★ attention / * required / labels.
+        nodeDefaults: carryUserMarks(workflow.nodeDefaults, parsed.nodeDefaults),
+        mediaSlots: carryUserMarks(workflow.mediaSlots, parsed.mediaSlots),
       }
       const workflows = (config.workflows ?? []).map(existing =>
         existing.workflowId === workflow.workflowId ? next : existing)

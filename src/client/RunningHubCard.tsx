@@ -31,6 +31,7 @@ import type {
   ValidateWorkflowRequest,
   WorkflowDefinition,
 } from "../types.ts";
+import { carryUserMarks } from "../payload.ts";
 import { PluginCard } from "./PluginCard.tsx";
 import { SecretField, ValueField } from "./fields.tsx";
 import type { RunningHubCardFace } from "./runninghub-card-controller.ts";
@@ -362,11 +363,18 @@ export function RunningHubCard(props: RunningHubCardProps) {
       return;
     }
     const data = result.value;
+    // Merge, not overwrite: the fetched prompt carries no ★ attention / *
+    // required / custom labels, so replacing the lists wholesale would clear
+    // every hand-set mark on the workflow being refreshed.
     updateWorkflow(index, {
       ...(data.prompt !== undefined ? { prompt: data.prompt } : {}),
       fetchedAt: new Date().toISOString(),
-      nodeDefaults: data.nodeDefaults ?? workflow.nodeDefaults,
-      mediaSlots: data.mediaSlots ?? workflow.mediaSlots,
+      nodeDefaults: data.nodeDefaults === undefined
+        ? workflow.nodeDefaults
+        : carryUserMarks(workflow.nodeDefaults, data.nodeDefaults),
+      mediaSlots: data.mediaSlots === undefined
+        ? workflow.mediaSlots
+        : carryUserMarks(workflow.mediaSlots, data.mediaSlots),
     });
     setStatus({
       kind: "ok",
@@ -819,6 +827,22 @@ export function RunningHubCard(props: RunningHubCardProps) {
               </button>
             </div>
 
+            <textarea
+              className={css.textarea}
+              value={workflow.usageNote ?? ""}
+              placeholder={t("usageNotePlaceholder")}
+              aria-label={t("usageNote")}
+              rows={2}
+              disabled={disabled}
+              onChange={(e) => {
+                const value = e.target.value;
+                const next: WorkflowDefinition = { ...workflow };
+                if (value === "") delete next.usageNote;
+                else next.usageNote = value;
+                updateWorkflow(wfIndex, next);
+              }}
+            />
+
             {expanded[key] === true ? (
               <>
                 {workflow.nodeDefaults.map((param, paramIndex) => (
@@ -998,7 +1022,11 @@ export function RunningHubCard(props: RunningHubCardProps) {
   );
 }
 
-/** Merge an LLM analysis into a workflow: description (when fillText) plus the proposed attention marks. */
+/**
+ * Merge an LLM analysis into a workflow: description + usage notes (when
+ * fillText) plus the proposed attention marks. A note is never cleared here —
+ * only a non-empty one replaces it, so a hand-recorded gotcha survives.
+ */
 function applyAnalysis(
   workflow: WorkflowDefinition,
   data: DescribeWorkflowData,
@@ -1006,6 +1034,8 @@ function applyAnalysis(
 ): WorkflowDefinition {
   const next: WorkflowDefinition = { ...workflow };
   if (fillText && data.description !== "") next.description = data.description;
+  if (fillText && data.usageNote !== undefined && data.usageNote !== "")
+    next.usageNote = data.usageNote;
   if (data.attention !== undefined) {
     const marked = new Set(data.attention);
     next.nodeDefaults = workflow.nodeDefaults.map((param) => {

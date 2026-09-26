@@ -1,5 +1,6 @@
 /** Settings namespace, schema, and shared types for the RunningHub plugin. */
 
+import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 
@@ -80,6 +81,13 @@ export interface WorkflowDefinition {
    * per slot.
    */
   mediaNote?: string
+  /**
+   * One line per gotcha this workflow has actually hit (legal enum values,
+   * required instance type, how to cut unused slots). Written by the describe
+   * pass from the node registry, or recorded after a failed run — it is the
+   * channel for "this workflow needs X" without a plugin release.
+   */
+  usageNote?: string
 }
 
 /**
@@ -105,17 +113,51 @@ export interface RunningHubConfig {
   workflows?: WorkflowDefinition[]
 }
 
-export const Config: z<RunningHubConfig> = z.object({
-  apiKey: z.string().role('secret'),
-  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV),
-  baseUrl: z.string().default(DEFAULT_BASE_URL),
-  defaultWorkflowLabel: z.string(),
-  pollIntervalMs: z.number().step(1).min(1000).default(DEFAULT_POLL_INTERVAL_MS),
-  runTimeoutMs: z.number().step(1).min(0).default(DEFAULT_RUN_TIMEOUT_MS),
-  queueTimeoutMs: z.number().step(1).min(0).default(DEFAULT_QUEUE_TIMEOUT_MS),
-  maxConcurrentTasks: z.number().step(1).min(1).default(DEFAULT_MAX_CONCURRENT_TASKS),
-  uploadUseLegacy: z.boolean().default(false),
-  taskPanelEnabled: z.boolean().default(true),
-  describeModel: z.string(),
-  workflows: z.any<WorkflowDefinition[]>().default([]),
+/**
+ * The row plugin's own Cordis `Config`. The profile entry id (`runninghub`, the
+ * same string as {@link RUNNINGHUB_NS}) is the configuration form's namespace,
+ * so a `.volatile()` field is what the browser card edits live: the value lands
+ * in the profile's Cordis patch and reaches {@link apply} without a remount.
+ * Secrets still ride `role('secret')` and are redacted from form responses.
+ */
+export interface Config {
+  /** Literal key; prefer {@link Config.apiKeyEnv} so no secret enters configuration files. */
+  apiKey: Volatile<string | undefined>
+  /** Credential reference resolved per request. */
+  apiKeyEnv: Volatile<string>
+  /** OpenAPI base URL. */
+  baseUrl: Volatile<string>
+  /** Label a run uses when the caller names no workflow. */
+  defaultWorkflowLabel: Volatile<string | undefined>
+  /** Status poll interval. */
+  pollIntervalMs: Volatile<number>
+  /** Run-phase timeout; 0 = unlimited. */
+  runTimeoutMs: Volatile<number>
+  /** Queue-phase timeout; 0 = unlimited. */
+  queueTimeoutMs: Volatile<number>
+  /** Local concurrency gate. */
+  maxConcurrentTasks: Volatile<number>
+  /** Legacy multipart upload endpoint. */
+  uploadUseLegacy: Volatile<boolean>
+  /** Floating task-panel overlay in the web UI. */
+  taskPanelEnabled: Volatile<boolean>
+  /** 'provider/model' route for description generation; empty = agent default. */
+  describeModel: Volatile<string | undefined>
+  /** Saved workflow definitions the card edits. */
+  workflows: Volatile<WorkflowDefinition[]>
+}
+
+export const Config = z.object({
+  apiKey: z.string().role('secret').volatile(),
+  apiKeyEnv: z.string().role('credential-ref').default(DEFAULT_API_KEY_ENV).volatile(),
+  baseUrl: z.string().default(DEFAULT_BASE_URL).volatile(),
+  defaultWorkflowLabel: z.string().volatile(),
+  pollIntervalMs: z.number().step(1).min(1000).default(DEFAULT_POLL_INTERVAL_MS).volatile(),
+  runTimeoutMs: z.number().step(1).min(0).default(DEFAULT_RUN_TIMEOUT_MS).volatile(),
+  queueTimeoutMs: z.number().step(1).min(0).default(DEFAULT_QUEUE_TIMEOUT_MS).volatile(),
+  maxConcurrentTasks: z.number().step(1).min(1).default(DEFAULT_MAX_CONCURRENT_TASKS).volatile(),
+  uploadUseLegacy: z.boolean().default(false).volatile(),
+  taskPanelEnabled: z.boolean().default(true).volatile(),
+  describeModel: z.string().volatile(),
+  workflows: z.any<WorkflowDefinition[]>().default([]).volatile(),
 })

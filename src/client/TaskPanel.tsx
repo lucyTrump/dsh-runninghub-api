@@ -7,15 +7,15 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { CancelTaskData, ListTasksData, TaskSummary } from '../types.ts'
 import type { RunningHubSection } from './runninghub-card-controller.ts'
 import css from './TaskPanel.module.css'
 
-/** Injected face: the bound settings scope plus the two task remotes. */
+/** Injected face: the entry's configuration form plus the two task remotes. */
 export interface TaskPanelInjected {
-  scope: SettingsScope<RunningHubSection>
+  form: ConfigForm<RunningHubSection>
   listTasks: () => Promise<RemoteResult<ListTasksData>>
   cancelTask: (localId: string) => Promise<RemoteResult<CancelTaskData>>
   refreshTasks: () => Promise<RemoteResult<ListTasksData>>
@@ -49,10 +49,10 @@ function timeOf(iso: string): string {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export function TaskPanel({ scope, listTasks, cancelTask, refreshTasks, t }: Props) {
+export function TaskPanel({ form, listTasks, cancelTask, refreshTasks, t }: Props) {
   const enabled = useSyncExternalStore(
-    listener => scope.subscribe(listener),
-    () => scope.getSnapshot().value?.taskPanelEnabled ?? true,
+    listener => form.subscribe(listener),
+    () => form.getSnapshot().value?.taskPanelEnabled ?? true,
   )
   const [open, setOpen] = useState(false)
   const [tasks, setTasks] = useState<TaskSummary[]>([])

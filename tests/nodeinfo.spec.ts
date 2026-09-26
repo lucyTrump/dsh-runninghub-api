@@ -21,6 +21,9 @@ const REGISTRY: ObjectInfoRegistry = {
   ImageResize: {
     input: { required: { megapixels: ['FLOAT', { min: 0.01, max: 16, step: 0.05 }] } },
   },
+  ResolutionSelector: {
+    input: { required: { aspect_ratio: ['COMBO', { options: ['1:1 (Square)', '16:9 (Widescreen)', '9:16 (Portrait Widescreen)'] }] } },
+  },
 }
 
 const classOf = new Map([
@@ -43,6 +46,52 @@ describe('inputMetaFor', () => {
   it('returns undefined for unknown classes, fields, and link types', () => {
     expect(inputMetaFor(REGISTRY, 'Nope', 'x')).toBeUndefined()
     expect(inputMetaFor(REGISTRY, 'KSampler', 'model')).toBeUndefined()
+  })
+
+  // Regression: RunningHub's registry now spells combos the ComfyUI V3 way;
+  // missing this turned every enum into a free-text box.
+  it('reads ComfyUI V3 combos (["COMBO", { options }]) as a select', () => {
+    expect(inputMetaFor(REGISTRY, 'ResolutionSelector', 'aspect_ratio')).toMatchObject({
+      kind: 'select',
+      options: ['1:1 (Square)', '16:9 (Widescreen)', '9:16 (Portrait Widescreen)'],
+    })
+    expect(inputMetaFor(REGISTRY, 'ResolutionSelector', 'nope')).toBeUndefined()
+  })
+
+  // Both registry generations must keep working: a RunningHub deploy that rolls
+  // back (or a cached older registry) still has to yield dropdowns.
+  it('keeps the legacy combo shape, bounds included', () => {
+    const legacy: ObjectInfoRegistry = {
+      Old: {
+        input: {
+          required: {
+            mode: [['fast', 'slow'], { min: 0, max: 2, step: 1 }],
+            scale: [[1, 2, 4], {}],
+          },
+        },
+      },
+    }
+    expect(inputMetaFor(legacy, 'Old', 'mode')).toEqual({ kind: 'select', options: ['fast', 'slow'], min: 0, max: 2, step: 1 })
+    expect(inputMetaFor(legacy, 'Old', 'scale')).toEqual({ kind: 'select', options: ['1', '2', '4'] })
+  })
+
+  it('tolerates the V3 spelling variants and falls back to inference when unusable', () => {
+    const newStyle: ObjectInfoRegistry = {
+      New: {
+        input: {
+          required: {
+            lower: ['combo', { options: ['a'] }],
+            bare: ['COMBO', ['a', 'b']],
+            empty: ['COMBO', { options: [] }],
+            optionless: ['COMBO', {}],
+          },
+        },
+      },
+    }
+    expect(inputMetaFor(newStyle, 'New', 'lower')).toEqual({ kind: 'select', options: ['a'] })
+    expect(inputMetaFor(newStyle, 'New', 'bare')).toEqual({ kind: 'select', options: ['a', 'b'] })
+    expect(inputMetaFor(newStyle, 'New', 'empty')).toBeUndefined()
+    expect(inputMetaFor(newStyle, 'New', 'optionless')).toBeUndefined()
   })
 })
 
