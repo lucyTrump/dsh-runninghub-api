@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import {
-  IconChevronDownOutline14,
+  IconChevronDownOutlineRegular,
   Tag,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { CardShell } from "./card-form.ts";
@@ -79,7 +79,7 @@ export function PluginCard(props: PluginCardProps) {
             {props.t("unsaved")}
           </Tag>
         ) : null}
-        <IconChevronDownOutline14
+        <IconChevronDownOutlineRegular
           className={clsx(css.chevron, open && css.chevronOpen)}
         />
       </button>

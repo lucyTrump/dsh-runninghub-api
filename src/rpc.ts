@@ -22,6 +22,13 @@ import type {
 } from './types.ts'
 import type { RunningHubTaskRunner } from './runner.ts'
 
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    /** Context this plugin injects on the model's behalf (describe prompts, registry digests). */
+    'dsh-runninghub-api': { kind: 'dsh-runninghub-api' }
+  }
+}
+
 export interface RunningHubControllerDeps {
   getConfig: () => RunningHubConfig
   /** Resolve the API key (credentials domain → literal fallback). */
@@ -195,7 +202,7 @@ export class RunningHubController extends TypertRemoteService {
           model,
           messages: [createUserMessage({
             content: [{ type: 'text', text: digest }],
-            source: { kind: 'plugin', plugin: 'dsh-runninghub-api' },
+            source: { kind: 'dsh-runninghub-api' },
           })],
           system: zh ? DESCRIBE_SYSTEM_ZH : DESCRIBE_SYSTEM_EN,
           // No maxTokens (adapters omit the cap and the provider uses the

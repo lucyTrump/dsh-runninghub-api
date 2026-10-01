@@ -20,9 +20,13 @@ const ACCENT: Record<string, string> = {
   running: "#1976d2",
 };
 
-export function RunWorkflowRow({ block, t }: Props) {
-  const settled = "kind" in block;
-  const argsRaw = (settled ? block.call?.argsRaw : block.argsRaw) ?? "";
+export function RunWorkflowRow({ block, phase, t }: Props) {
+  const argsRaw =
+    (phase === "result"
+      ? block.call?.argsRaw
+      : phase === "start"
+        ? block.argsRaw
+        : "") ?? "";
   let args: { workflow?: string; overrides?: unknown } = {};
   try {
     const parsed = JSON.parse(argsRaw) as unknown;
@@ -31,10 +35,10 @@ export function RunWorkflowRow({ block, t }: Props) {
   } catch {
     args = {};
   }
-  const meta = (settled ? block.meta : undefined) as
+  const meta = (phase === "result" ? block.meta : undefined) as
     | RunWorkflowMeta
     | undefined;
-  const state = !settled ? "running" : block.isError ? "error" : "ok";
+  const state = phase !== "result" ? "running" : block.isError ? "error" : "ok";
   const label = meta?.label ?? args.workflow ?? t("toolviewUnknownWorkflow");
   const nodeInfoList = meta?.nodeInfoList;
   const hasPayload = nodeInfoList !== null && nodeInfoList !== undefined;

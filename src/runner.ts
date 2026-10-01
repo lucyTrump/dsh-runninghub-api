@@ -389,7 +389,7 @@ export class RunningHubTaskRunner {
         return {
           status: 'completed',
           detail: `${outputs.length} result file(s) saved`,
-          output: JSON.stringify(outputs, null, 2),
+          result: JSON.stringify(outputs, null, 2),
         }
       }
       if (result.code === 804) {

@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Button,
-  IconCheckOutline16,
-  IconChevronDownOutline14,
-  IconCopyOutline16,
-  IconLightOutline16,
-  IconSparkle16,
+  IconCheckOutlineRegular,
+  IconChevronDownOutlineRegular,
+  IconCopyOutlineRegular,
+  IconLightOutlineRegular,
+  IconSparkleRegular,
   Switch,
   Tag,
 } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -605,7 +605,7 @@ export function RunningHubCard(props: RunningHubCardProps) {
               <span className={css.modelPickerValue}>
                 {describeSelectionLabel}
               </span>
-              <IconChevronDownOutline14 size={14} />
+              <IconChevronDownOutlineRegular size={14} />
             </button>
             {pickerOpen ? (
               <div
@@ -768,9 +768,9 @@ export function RunningHubCard(props: RunningHubCardProps) {
                 }}
               >
                 {copiedKey === key ? (
-                  <IconCheckOutline16 size={14} />
+                  <IconCheckOutlineRegular size={14} />
                 ) : (
-                  <IconCopyOutline16 size={14} />
+                  <IconCopyOutlineRegular size={14} />
                 )}
               </button>
               <button
@@ -789,7 +789,7 @@ export function RunningHubCard(props: RunningHubCardProps) {
                     expanded[key] === true ? css.chevronOpen : css.chevron
                   }
                 >
-                  <IconChevronDownOutline14 size={14} />
+                  <IconChevronDownOutlineRegular size={14} />
                 </span>
                 {t("params")} ({workflow.nodeDefaults.length})
               </button>
@@ -820,7 +820,7 @@ export function RunningHubCard(props: RunningHubCardProps) {
                   void doDescribe(wfIndex);
                 }}
               >
-                <IconSparkle16
+                <IconSparkleRegular
                   size={14}
                   className={busy === `describe:${key}` ? css.spin : undefined}
                 />
@@ -866,7 +866,7 @@ export function RunningHubCard(props: RunningHubCardProps) {
                         toggleAttention(wfIndex, paramIndex);
                       }}
                     >
-                      <IconLightOutline16 size={14} />
+                      <IconLightOutlineRegular size={14} />
                     </button>
                     <span
                       className={css.paramLabel}
@@ -919,7 +919,7 @@ export function RunningHubCard(props: RunningHubCardProps) {
                         disabled={disabled}
                         onClick={() => { toggleMediaAttention(wfIndex, slotIndex) }}
                       >
-                        <IconLightOutline16 size={14} />
+                        <IconLightOutlineRegular size={14} />
                       </button>
                       <span
                         className={css.mediaLabel}
